@@ -11,14 +11,14 @@ app = FastAPI(
     version="0.1.0"
 )
 
-def get_base_dir() -> str:
+def getBaseDir() -> str:
     # Si PyInstaller congeló la app, los datos están en sys._MEIPASS
     if getattr(sys, "frozen", False):
         return sys._MEIPASS  # type: ignore[attr-defined]
     # Si no, usamos la ubicación del archivo actual
     return os.path.dirname(os.path.abspath(__file__))
 
-BASE_DIR = get_base_dir()
+BASE_DIR = getBaseDir()
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 

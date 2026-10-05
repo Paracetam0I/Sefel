@@ -5,7 +5,7 @@ import webview
 import uvicorn
 from app.main import app
 
-def get_unused_port():
+def getUnusedPort():
     """Encuentra un puerto libre en localhost."""
     while True:
         port = random.randint(1024, 65535)
@@ -17,7 +17,7 @@ def get_unused_port():
         except OSError:
             pass
 
-port = get_unused_port()
+port = getUnusedPort()
 
 # Arranca FastAPI en un hilo daemon
 t = threading.Thread(
@@ -29,5 +29,5 @@ t.daemon = True
 t.start()
 
 # Crea la ventana nativa apuntando al servidor local
-webview.create_window("Mi App", f"http://localhost:{port}")
+webview.create_window("APU sefel", f"http://localhost:{port}")
 webview.start()
