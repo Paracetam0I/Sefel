@@ -72,3 +72,8 @@ SEFEL utiliza Alembic para versionar los cambios en el esquema de la base de dat
 * Los modelos deben importarse en `alembic/env.py` para que Alembic los detecte.
 * La opción `--autogenerate` propone cambios; siempre se debe revisar la migración antes de aplicarla.
 * La migración inicial de prueba crea la tabla `test_model`. Este modelo es temporal y deberá retirarse cuando se definan los modelos definitivos de SEFEL.
+# Test
+Prueba de cambios en la rama de Andres
+
+# Prueba
+Prueba Coté
