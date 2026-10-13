@@ -41,5 +41,34 @@ requirements.txt
 # Sefel
 Proyecto de la empresa Sefel relacionado a la herramienta de presupuestación y administración de precios unitarios
 
-# Test
-Prueba de cambios en la rama de Andres
+## Migraciones de base de datos (Alembic)
+
+SEFEL utiliza Alembic para versionar los cambios en el esquema de la base de datos. La configuración de conexión se obtiene desde `app/core/db.py` mediante `alembic/env.py`, que importa los modelos de SQLModel y utiliza `SQLModel.metadata`.
+
+### Flujo de trabajo
+
+1. **Generar una migración** después de modificar o crear modelos:
+
+   ```powershell
+   python -m alembic revision --autogenerate -m "descripcion_del_cambio"
+   ```
+
+2. **Revisar el archivo generado** dentro de `alembic/versions/`. Comprobar que las operaciones coincidan con los cambios esperados antes de aplicarlas.
+
+3. **Aplicar las migraciones pendientes**:
+
+   ```powershell
+   python -m alembic upgrade head
+   ```
+
+4. **Consultar la revisión aplicada**:
+
+   ```powershell
+   python -m alembic current
+   ```
+
+### Consideraciones
+
+* Los modelos deben importarse en `alembic/env.py` para que Alembic los detecte.
+* La opción `--autogenerate` propone cambios; siempre se debe revisar la migración antes de aplicarla.
+* La migración inicial de prueba crea la tabla `test_model`. Este modelo es temporal y deberá retirarse cuando se definan los modelos definitivos de SEFEL.
