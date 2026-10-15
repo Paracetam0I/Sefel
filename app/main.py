@@ -8,9 +8,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.logging import configuracionLogging
-
+from app.core.config import SECRET_KEY
 
 logger = configuracionLogging()
 
@@ -19,6 +20,14 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SECRET_KEY,
+    session_cookie="sefel_session",
+    max_age=60 * 60 * 8,  # la sesión dura 8 horas
+    same_site="lax",
+    https_only=False,  # la app corre en http://127.0.0.1, no en https
+)
 
 def getBaseDir() -> str:
     # Si PyInstaller congeló la app, los recursos están en sys._MEIPASS

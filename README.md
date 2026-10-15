@@ -72,6 +72,33 @@ SEFEL utiliza Alembic para versionar los cambios en el esquema de la base de dat
 * Los modelos deben importarse en `alembic/env.py` para que Alembic los detecte.
 * La opción `--autogenerate` propone cambios; siempre se debe revisar la migración antes de aplicarla.
 * La migración inicial de prueba crea la tabla `test_model`. Este modelo es temporal y deberá retirarse cuando se definan los modelos definitivos de SEFEL.
+
+## Sesiones y rotación de la SECRET_KEY
+
+La app guarda `user_id` y rol en una cookie firmada con `SECRET_KEY`.
+
+**De dónde sale la clave (en orden):**
+1. Variable de entorno o archivo `.env` (desarrollo).
+2. Archivo `secret_key.txt` en la carpeta de datos del usuario (producción).
+3. Si no existe ninguna, se genera sola en la primera ejecución.
+
+**Cómo rotarla si se filtra:**
+
+- *Desarrollo:*
+  1. Generar una nueva: `python -c "import secrets; print(secrets.token_hex(32))"`
+  2. Reemplazar el valor de `SECRET_KEY` en `.env`.
+  3. Reiniciar la app.
+
+- *Producción (ejecutable):*
+  1. Cerrar la app.
+  2. Borrar `secret_key.txt` en la carpeta de datos del usuario
+     (`%LOCALAPPDATA%\inacap\APU sefel\`).
+  3. Abrir la app: se genera una clave nueva automáticamente.
+
+**Efecto:** todas las sesiones activas se invalidan y los usuarios deben iniciar sesión de nuevo.
+
+**Si la clave llegó a subirse a git:** rotarla es obligatorio. Borrar el archivo del repositorio no basta, porque la clave queda en el historial.
+
 # Test
 Prueba de cambios en la rama de Andres
 
