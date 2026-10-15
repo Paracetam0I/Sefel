@@ -99,6 +99,17 @@ La app guarda `user_id` y rol en una cookie firmada con `SECRET_KEY`.
 
 **Si la clave llegó a subirse a git:** rotarla es obligatorio. Borrar el archivo del repositorio no basta, porque la clave queda en el historial.
 
+## Seed
+En la raiz del proyecto existe un seed_admin.py que crea 4 usuarios básicos y los ingresa a la base de datos para hacer pruebas.
+
+Para generar los usuarios Y la tabla de usuario:
+```batch
+python -m scripts.seed_admin --create-tables
+```
+Para generar los usuarios, pero ya con la tabla creada:
+```batch
+python -m scripts.seed_admin
+```
 # Test
 Prueba de cambios en la rama de Andres
 
