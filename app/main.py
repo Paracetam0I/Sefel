@@ -19,6 +19,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.logging import configuracionLogging
 from app.core.config import SECRET_KEY
+from app.core.handlers import registerAuthHandlers
+from app.core.dependencies import CurrentUser
 from app.core.db import getSession
 from app.core.security import verifyPassword
 from app.core.flash import getFlashedMessages
@@ -41,6 +43,8 @@ app.add_middleware(
     https_only=False,  # la app corre en http://127.0.0.1, no en https
 )
 
+registerAuthHandlers(app)
+
 def getBaseDir() -> str:
     # Si PyInstaller congeló la app, los recursos están en sys._MEIPASS
     if getattr(sys, "frozen", False):
@@ -58,6 +62,10 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 templates.env.globals["get_flashed_messages"] = getFlashedMessages
 
+# Test de sesión 
+@app.get("/protegido")
+def rutaProtegida(request: Request, user: CurrentUser):
+    return {"hola": user.username}
 
 @app.on_event("startup")
 async def registrarInicio():
