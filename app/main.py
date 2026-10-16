@@ -4,14 +4,25 @@ import os
 import sys
 import time
 
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse
+from fastapi import Depends, Form
+
+from sqlmodel import Session, select
+
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.logging import configuracionLogging
 from app.core.config import SECRET_KEY
+from app.core.db import getSession
+from app.core.security import verifyPassword
+from app.models.user import User
+
 
 logger = configuracionLogging()
 
@@ -109,3 +120,75 @@ def saludo():
         "<p class='text-green-700 font-semibold'>"
         "¡Respuesta desde FastAPI con HTMX!</p>"
     )
+    
+def obtenerUsuarioActual(request: Request, db: Session) -> User | None:
+    user_id = request.session.get("user_id")
+    if user_id is None:
+        return None
+
+    usuario = db.get(User, user_id)
+    if usuario is None or not usuario.is_active:
+        request.session.clear()
+        return None
+
+    return usuario
+
+
+@app.get("/login")
+def mostrarLogin(request: Request, db: Session = Depends(getSession)):
+    if obtenerUsuarioActual(request, db):
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="auth/login.html",
+        context={"error": None},
+    )
+    
+@app.post("/login")
+def procesarLogin(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(getSession), #le pasamos la sesión de la base de datos como dependencia
+):
+    usuario = db.exec(select(User).where(User.username == username)).first()
+
+    if (
+        usuario is None
+        or not usuario.is_active
+        or not verifyPassword(password, usuario.hashed_password)
+    ):
+        return templates.TemplateResponse(
+            request=request,
+            name="auth/login.html",
+            context={"error": "Usuario o contraseña incorrectos"},
+            status_code=401,
+        )
+
+    usuario.last_login = datetime.now(timezone.utc)
+    db.add(usuario)
+    db.commit()
+
+    request.session["user_id"] = usuario.id # Guardamos el ID del usuario en la sesión (se escribe en una cookie)
+    request.session["role"] = usuario.role.value # Guardamos el rol del usuario en la sesión
+
+    return RedirectResponse(url="/dashboard", status_code=303) #status_code=303 indica que es una redirección después de un POST, para evitar que el navegador vuelva a enviar el formulario si se recarga la página
+
+@app.get("/dashboard")
+def mostrarDashboard(request: Request, db: Session = Depends(getSession)):
+    usuario = obtenerUsuarioActual(request, db)
+    if usuario is None:
+        return RedirectResponse(url="/login", status_code=303)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={"usuario": usuario},
+    )
+
+
+@app.post("/logout")
+def cerrarSesion(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
