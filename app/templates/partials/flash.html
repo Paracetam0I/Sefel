@@ -1,0 +1,18 @@
+{# Mensajes flash. Categorías: success, error, warning (cualquier otra se muestra como info). #}
+{# El id permite que HTMX inyecte notificaciones aquí con hx-swap-oob. #}
+<div id="notificaciones" class="mb-6 space-y-3 empty:mb-0">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            {% set estilo = {
+                'error':   'bg-red-50 border-sefel-red text-sefel-red',
+                'success': 'bg-green-50 border-green-500 text-green-700',
+                'warning': 'bg-yellow-50 border-yellow-500 text-yellow-700',
+            }.get(category, 'bg-blue-50 border-blue-500 text-blue-700') %}
+            <div x-data="{ visible: true }" x-show="visible" role="alert"
+                 class="flex items-start justify-between gap-4 rounded-r-lg border-l-4 px-4 py-3 text-sm {{ estilo }}">
+                <span>{{ message }}</span>
+                <button type="button" @click="visible = false" class="font-bold leading-none" aria-label="Cerrar">&times;</button>
+            </div>
+        {% endfor %}
+    {% endwith %}
+</div>
