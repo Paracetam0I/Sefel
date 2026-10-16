@@ -21,6 +21,7 @@ from app.core.logging import configuracionLogging
 from app.core.config import SECRET_KEY
 from app.core.db import getSession
 from app.core.security import verifyPassword
+from app.core.flash import getFlashedMessages
 from app.models.user import User
 
 
@@ -55,6 +56,7 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+templates.env.globals["get_flashed_messages"] = getFlashedMessages
 
 
 @app.on_event("startup")

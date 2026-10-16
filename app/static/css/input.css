@@ -1,1 +1,40 @@
 @import "tailwindcss";
+
+/* ---------- Tokens de marca ---------- */
+@theme {
+  --color-sefel-red: #b83a32;
+  --color-sefel-black: #171717;
+  --font-sans: "Montserrat", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------- Base (macOS / WKWebView de pywebview) ---------- */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Evita el "rebote" elástico de macOS al hacer scroll en la ventana */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+
+  /* Alpine: oculta elementos hasta que se inicializa */
+  [x-cloak] {
+    display: none !important;
+  }
+}
+
+/* ---------- Componentes del layout ---------- */
+@layer components {
+  .nav-link {
+    @apply flex items-center gap-3.5 rounded-lg px-3.5 py-2.5 text-[15px]
+      text-neutral-400 transition-colors hover:bg-white/5 hover:text-white;
+  }
+
+  .nav-link[aria-current="page"] {
+    @apply bg-sefel-red text-white hover:bg-sefel-red;
+  }
+}
