@@ -21,9 +21,11 @@ from app.core.logging import configuracionLogging
 from app.core.config import SECRET_KEY
 from app.core.handlers import registerAuthHandlers
 from app.core.dependencies import CurrentUser
-from app.core.db import getSession
+from app.core.dependencies import OptionalUser
 from app.core.security import verifyPassword
 from app.core.flash import getFlashedMessages
+from app.core.db import getSession
+
 from app.models.user import User
 
 
@@ -90,6 +92,7 @@ async def registrarSolicitudes(request: Request, call_next):
 
     return response
 
+# Echarle un ojo a ver si se puede mover esta función a handlers.py para ahorrar un poco de espacio. El handlers.py se encarga de manejar errores
 
 @app.exception_handler(Exception)
 async def manejarErrorInesperado(
@@ -131,22 +134,14 @@ def saludo():
         "¡Respuesta desde FastAPI con HTMX!</p>"
     )
     
-def obtenerUsuarioActual(request: Request, db: Session) -> User | None:
-    user_id = request.session.get("user_id")
-    if user_id is None:
-        return None
-
-    usuario = db.get(User, user_id)
-    if usuario is None or not usuario.is_active:
-        request.session.clear()
-        return None
-
-    return usuario
+# OptionalUser permite que la ruta pueda tener usuarios sin sesiones
+# CurrentUser permite que únicamente los usuarios con sesiones puedan estar en las páginas
 
 
 @app.get("/login")
-def mostrarLogin(request: Request, db: Session = Depends(getSession)):
-    if obtenerUsuarioActual(request, db):
+def mostrarLogin(request: Request, usuario: OptionalUser):
+    if usuario is not None:
+        # Revisar esto luego, no redirigir al dashboard, si no que a otra ruta por defecto
         return RedirectResponse(url="/dashboard", status_code=303)
 
     return templates.TemplateResponse(
@@ -158,11 +153,17 @@ def mostrarLogin(request: Request, db: Session = Depends(getSession)):
 @app.post("/login")
 def procesarLogin(
     request: Request,
+    user: OptionalUser,
     username: str = Form(...),
     password: str = Form(...),
-    db: Session = Depends(getSession), #le pasamos la sesión de la base de datos como dependencia
+    session: Session = Depends(getSession)
 ):
-    usuario = db.exec(select(User).where(User.username == username)).first()
+    # Si el usuario tiene sesión, lo redirige a dashboard
+    if user is not None:
+        return RedirectResponse("/dashboard", status_code=303)
+
+    
+    usuario = session.exec(select(User).where(User.username == username)).first()
 
     if (
         usuario is None
@@ -176,28 +177,31 @@ def procesarLogin(
             status_code=401,
         )
 
+    if not usuario.is_active:
+        return templates.TemplateResponse(
+            request=request,
+            name="auth/login.html",
+            context={"error": "Tu cuenta está desactivada"},
+            status_code=403,
+            )
     usuario.last_login = datetime.now(timezone.utc)
-    db.add(usuario)
-    db.commit()
+    session.add(usuario)
+    session.commit()
 
     request.session["user_id"] = usuario.id # Guardamos el ID del usuario en la sesión (se escribe en una cookie)
-    request.session["role"] = usuario.role.value # Guardamos el rol del usuario en la sesión
 
+# Luego echar un ojo en este redirect, para cambiar por un next_url y poner por defecto la web de los presupuesto u otra distinta que no sea el dashboard
     return RedirectResponse(url="/dashboard", status_code=303) #status_code=303 indica que es una redirección después de un POST, para evitar que el navegador vuelva a enviar el formulario si se recarga la página
 
 @app.get("/dashboard")
-def mostrarDashboard(request: Request, db: Session = Depends(getSession)):
-    usuario = obtenerUsuarioActual(request, db)
-    if usuario is None:
-        return RedirectResponse(url="/login", status_code=303)
-
+def mostrarDashboard(request: Request, usuario: CurrentUser):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
         context={"usuario": usuario},
     )
 
-
+# Formulario para salir de sesión
 @app.post("/logout")
 def cerrarSesion(request: Request):
     request.session.clear()
