@@ -4,6 +4,7 @@ import os
 import sys
 import time
 
+from typing import Annotated
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
@@ -26,7 +27,9 @@ from app.core.security import verifyPassword
 from app.core.flash import getFlashedMessages
 from app.core.db import getSession
 
-from app.models.user import User
+from app.models.user import User, UserRole
+
+from app.core.dependencies import requireRoles
 
 
 logger = configuracionLogging()
@@ -45,8 +48,6 @@ app.add_middleware(
     https_only=False,  # la app corre en http://127.0.0.1, no en https
 )
 
-registerAuthHandlers(app)
-
 def getBaseDir() -> str:
     # Si PyInstaller congeló la app, los recursos están en sys._MEIPASS
     if getattr(sys, "frozen", False):
@@ -64,10 +65,31 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 templates.env.globals["get_flashed_messages"] = getFlashedMessages
 
+registerAuthHandlers(app, templates)
+
 # Test de sesión 
 @app.get("/protegido")
 def rutaProtegida(request: Request, user: CurrentUser):
     return {"hola": user.username}
+
+@app.get("/prueba/solo-admin")
+def rutaSoloAdmin(
+    #cuando se usa Annotated, el primer argumento es el tipo de dato que se espera, 
+    # y el segundo argumento es la dependencia que se va a usar para obtener ese dato. 
+    # En este caso, se espera un objeto User, y la dependencia es requireRoles(UserRole.ADMIN), 
+    # que verifica que el usuario tenga el rol de ADMIN. Si no lo tiene, se lanza una excepción RoleForbidden.
+    
+    user: Annotated[User, Depends(requireRoles(UserRole.ADMIN))], 
+):
+    return {"hola": user.username, "rol": user.role.value}
+
+
+@app.get(
+    "/prueba/presupuestos",
+    dependencies=[Depends(requireRoles(UserRole.ADMIN, UserRole.BUDGETS))],
+)
+def rutaPresupuestos():
+    return {"ok": "puedes ver presupuestos"}
 
 @app.on_event("startup")
 async def registrarInicio():
