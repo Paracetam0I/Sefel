@@ -69,11 +69,6 @@ def getOptionalUser(
     """Rutas que funcionan con o sin login. Devuelve None si no hay."""
     return _cargar_usuario(request, session)
 
-
-# Alias para usar en las firmas de los endpoints
-CurrentUser = Annotated[User, Depends(getCurrentUser)]
-OptionalUser = Annotated[User | None, Depends(getOptionalUser)]
-
 def requireRoles(*roles: UserRole):
     """Devuelve una dependency que solo deja pasar a usuarios con uno de los roles dados."""
     allowed = set(roles)
@@ -84,3 +79,7 @@ def requireRoles(*roles: UserRole):
         return user
 
     return checkRole
+
+# Alias para usar en las firmas de los endpoints
+CurrentUser = Annotated[User, Depends(getCurrentUser)]
+OptionalUser = Annotated[User | None, Depends(getOptionalUser)]
