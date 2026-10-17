@@ -24,10 +24,10 @@ from app.core.handlers import registerAuthHandlers
 from app.core.dependencies import CurrentUser
 from app.core.dependencies import OptionalUser
 from app.core.security import verifyPassword
-from app.core.flash import getFlashedMessages
 from app.core.db import getSession
-
+from app.core.routers import admin
 from app.models.user import User, UserRole
+from app.templates import templates
 
 from app.core.dependencies import requireRoles
 
@@ -62,10 +62,12 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
-templates.env.globals["get_flashed_messages"] = getFlashedMessages
 
+# ==================================================
+# Bloque para registros
+# ==================================================
 registerAuthHandlers(app, templates)
+app.include_router(admin.router)
 
 # Test de sesión 
 @app.get("/protegido")
