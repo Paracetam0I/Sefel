@@ -21,15 +21,15 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.core.logging import configuracionLogging
 from app.core.config import SECRET_KEY
 from app.core.handlers import registerAuthHandlers
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import CurrentUser, getCurrentUser
 from app.core.dependencies import OptionalUser
 from app.core.security import verifyPassword
 from app.core.db import getSession
 from app.core.routers import admin
+from app.core.dependencies import requireRoles
+
 from app.models.user import User, UserRole
 from app.templates import templates
-
-from app.core.dependencies import requireRoles
 
 
 logger = configuracionLogging()
@@ -37,6 +37,9 @@ logger = configuracionLogging()
 app = FastAPI(
     title="Proyecto APU Sefel",
     version="0.1.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.add_middleware(
@@ -144,14 +147,19 @@ async def manejarErrorInesperado(
 
 
 @app.get("/")
-def index(request: Request):
+def index(request: Request, usuario: CurrentUser):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
+        context={"usuario": usuario},
     )
 
 
-@app.get("/api/saludo")
+@app.get(
+    "/api/saludo",
+    response_class=HTMLResponse,
+    dependencies=[Depends(getCurrentUser)],
+) #este endpoint es para probar que la sesión funciona, y que el usuario está logueado. Si no lo está, devuelve un 401
 def saludo():
     return (
         "<p class='text-green-700 font-semibold'>"
