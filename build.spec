@@ -13,6 +13,7 @@ hidden = (
         "uvicorn.protocols.websockets.auto",
         "uvicorn.lifespan.on",
         "app.main",  
+        "passlib.handlers.bcrypt",
     ]
 )
 
