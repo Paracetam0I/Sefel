@@ -12,6 +12,12 @@
 | `/static/*` | GET | Pública | Sirve el archivo (el login necesita su CSS y JS) |
 | `/` | GET | Login (`CurrentUser`) | Redirige a `/login` |
 | `/dashboard` | GET | Login (`CurrentUser`) | Redirige a `/login` |
+| `/proyectos` | GET | Login (`CurrentUser`) | Redirige a `/login` |
+| `/apu` | GET | Login (`CurrentUser`) | Redirige a `/login` |
+| `/admin/users` | GET, POST | Rol `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/admin/users/new` | GET | Rol `ADMIN` | Redirige a `/admin/users?nuevo=1` |
+| `/admin/users/{id}` | POST | Rol `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/admin/users/{id}/estado` | POST | Rol `ADMIN` | Redirige a `/login`; con otro rol, 403 |
 | `/api/saludo` | GET | Login (`getCurrentUser`) | 401 en JSON (HTMX: `HX-Redirect` a `/login`) |
 | `/protegido` | GET | Login (ruta de prueba) | Redirige a `/login` |
 | `/prueba/solo-admin` | GET | Rol `ADMIN` (ruta de prueba) | Redirige a `/login`; con otro rol, 403 |
@@ -37,4 +43,4 @@ En una ventana privada nueva, abrir cada ruta del inventario:
 - [x] Con sesión de rol insuficiente, las rutas de rol muestran la página 403.
 
 ## Pendiente
-Las rutas `/protegido` y `/prueba/*` son de prueba y se eliminarán cuando existan las páginas reales. Aún no hay rutas de administración reales: cuando existan, deben usar `requireRoles(UserRole.ADMIN)`.
+Las rutas `/protegido` y `/prueba/*` son de prueba y se eliminarán cuando existan las páginas reales. `/proyectos` y `/apu` muestran datos de ejemplo (`app/core/datos_demo.py`) hasta que existan sus modelos. Las rutas de administración usan `requireRoles(UserRole.ADMIN)`.

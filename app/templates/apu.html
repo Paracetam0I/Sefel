@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "partials/ui.html" import icono, encabezado, stat_card, paginacion %}
+
+{% block title %}APU{% endblock title %}
+
+{% block content %}
+{% call encabezado("APU", "Catálogo de materiales y precios usados en los presupuestos.") %}
+    <button type="button" class="btn btn-primary">{{ icono("mas") }} Agregar material</button>
+{% endcall %}
+
+{# Resumen #}
+<section class="mt-8 grid grid-cols-2 gap-5 lg:grid-cols-4" aria-label="Resumen">
+    {{ stat_card("Materiales registrados", resumen.registrados, resumen.registrados_detalle) }}
+    {{ stat_card("Activos", resumen.activos, resumen.activos_detalle) }}
+    {{ stat_card("Inactivos", resumen.inactivos, resumen.inactivos_detalle) }}
+    {{ stat_card("Precios actualizados", resumen.actualizados, resumen.actualizados_detalle) }}
+</section>
+
+{# Listado #}
+<section class="card mt-8 overflow-hidden">
+
+    {# Filtros (todavía sin conectar) #}
+    <form class="flex flex-wrap items-center gap-3 p-5" role="search" onsubmit="return false">
+        <div class="relative min-w-64 flex-1">
+            <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-neutral-400">{{ icono("buscar") }}</span>
+            <input type="search" name="q" placeholder="Buscar por código o nombre…" class="field w-full pl-10">
+        </div>
+        <select name="tipo" class="field select w-52" aria-label="Tipo">
+            <option value="">Tipo: Todos</option>
+            {% for t in materiales | map(attribute="tipo") | unique | sort %}<option>{{ t }}</option>{% endfor %}
+        </select>
+        <select name="estado" class="field select w-52" aria-label="Estado">
+            <option value="">Estado: Todos</option>
+            <option>Activo</option>
+            <option>Inactivo</option>
+        </select>
+    </form>
+
+    <div class="overflow-x-auto">
+        <table class="w-full min-w-[52rem] text-left">
+            <thead class="border-y border-gray-100 bg-gray-50">
+                <tr>
+                    <th class="th">Código</th>
+                    <th class="th">Nombre</th>
+                    <th class="th">Tipo</th>
+                    <th class="th">Unidad</th>
+                    <th class="th text-right">Precio unitario</th>
+                    <th class="th">Actualizado</th>
+                    <th class="th">Estado</th>
+                    <th class="th text-right">Editar</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for m in materiales %}
+                {# El interruptor solo cambia la vista (Alpine); aún no guarda en la base de datos. #}
+                <tr x-data="{ activo: {{ 'true' if m.activo else 'false' }} }"
+                    :class="activo ? '' : 'opacity-55'" class="hover:bg-gray-50/70">
+                    <td class="td whitespace-nowrap text-neutral-500">{{ m.codigo }}</td>
+                    <td class="td font-bold text-sefel-black">{{ m.nombre }}</td>
+                    <td class="td text-neutral-700">{{ m.tipo }}</td>
+                    <td class="td text-neutral-500">{{ m.unidad }}</td>
+                    <td class="td text-right font-bold text-sefel-black">{{ m.precio | clp }}</td>
+                    <td class="td text-neutral-500">{{ m.actualizado.strftime("%d/%m/%Y") }}</td>
+                    <td class="td">
+                        <div class="flex items-center gap-2.5">
+                            <button type="button" role="switch" :aria-checked="activo" @click="activo = !activo"
+                                    aria-label="Activar o desactivar {{ m.nombre }}"
+                                    :class="activo ? 'bg-sefel-red' : 'bg-gray-300'"
+                                    class="relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors">
+                                <span :class="activo ? 'translate-x-5' : 'translate-x-0.5'"
+                                    class="absolute top-0.5 left-0 size-5 rounded-full bg-white shadow transition-transform"></span>
+                            </button>
+                            <span class="text-neutral-700" x-text="activo ? 'Activo' : 'Inactivo'">{{ 'Activo' if m.activo else 'Inactivo' }}</span>
+                        </div>
+                    </td>
+                    <td class="td">
+                        <div class="flex justify-end text-neutral-500">
+                            <a href="#" class="hover:text-sefel-black" aria-label="Editar {{ m.nombre }}">{{ icono("editar", "size-[18px]") }}</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {{ paginacion(1, materiales | length, resumen.registrados, 1, 3) }}
+</section>
+{% endblock content %}

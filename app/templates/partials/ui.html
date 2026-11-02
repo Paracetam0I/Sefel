@@ -1,0 +1,80 @@
+{#
+    Piezas de interfaz reutilizables. Uso en una página:
+        {% from "partials/ui.html" import icono, encabezado, stat_card, paginacion %}
+    Los estilos viven en static/css/input.css (.card, .btn, .field, .th, .badge, .page-btn ...).
+#}
+
+{% set ICONOS = {
+    "buscar":    '<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>',
+    "descargar": '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+    "mas":       '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    "ver":       '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
+    "editar":    '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
+    "clave":     '<path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+    "calendario": '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    "anterior":  '<path d="m15 18-6-6 6-6"/>',
+    "siguiente": '<path d="m9 18 6-6-6-6"/>',
+} %}
+
+{% macro icono(nombre, clase="size-4") -%}
+<svg class="{{ clase }} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONOS[nombre] | safe }}</svg>
+{%- endmacro %}
+
+{# Título + subtítulo a la izquierda; los botones de acción se pasan con {% call encabezado(...) %} #}
+{% macro encabezado(titulo, subtitulo) %}
+<div class="flex items-start justify-between gap-6">
+    <div>
+        <h1 class="text-3xl font-bold tracking-tight text-sefel-black">{{ titulo }}</h1>
+        <p class="mt-1.5 text-[15px] text-neutral-500">{{ subtitulo }}</p>
+    </div>
+    <div class="flex shrink-0 items-center gap-3">{{ caller() }}</div>
+</div>
+{% endmacro %}
+
+{% macro stat_card(titulo, valor, detalle) %}
+<div class="card p-5">
+    <p class="text-sm text-neutral-600">{{ titulo }}</p>
+    <p class="mt-3 text-3xl font-extrabold tracking-tight text-sefel-black">{{ valor }}</p>
+    <p class="mt-2 text-sm text-neutral-500">{{ detalle }}</p>
+</div>
+{% endmacro %}
+
+{#
+    Pie de tabla: "Mostrando 1–8 de 42 registros" + botones de página.
+    Con base_url (ej. "/admin/users?q=ana&") los botones son enlaces reales (?pagina=N);
+    sin base_url son botones sin acción (maqueta).
+#}
+{% macro paginacion(desde, hasta, total, pagina, paginas, base_url=none) %}
+<div class="flex items-center justify-between border-t border-gray-100 px-5 py-4">
+    <p class="text-sm text-neutral-500">Mostrando {{ desde }}–{{ hasta }} de {{ total }} registros</p>
+    <nav class="flex items-center gap-1.5" aria-label="Paginación">
+        {% if base_url is none %}
+            <button type="button" class="page-btn" aria-label="Página anterior" {% if pagina == 1 %}disabled{% endif %}>{{ icono("anterior", "size-3.5") }}</button>
+            {% for n in range(1, paginas + 1) %}
+            <button type="button" class="page-btn" {% if n == pagina %}aria-current="page"{% endif %}>{{ n }}</button>
+            {% endfor %}
+            <button type="button" class="page-btn" aria-label="Página siguiente" {% if pagina == paginas %}disabled{% endif %}>{{ icono("siguiente", "size-3.5") }}</button>
+        {% else %}
+            {% if pagina > 1 %}<a href="{{ base_url }}pagina={{ pagina - 1 }}" class="page-btn" aria-label="Página anterior">{{ icono("anterior", "size-3.5") }}</a>
+            {% else %}<span class="page-btn text-neutral-300" aria-hidden="true">{{ icono("anterior", "size-3.5") }}</span>{% endif %}
+            {% for n in range(1, paginas + 1) %}
+            <a href="{{ base_url }}pagina={{ n }}" class="page-btn" {% if n == pagina %}aria-current="page"{% endif %}>{{ n }}</a>
+            {% endfor %}
+            {% if pagina < paginas %}<a href="{{ base_url }}pagina={{ pagina + 1 }}" class="page-btn" aria-label="Página siguiente">{{ icono("siguiente", "size-3.5") }}</a>
+            {% else %}<span class="page-btn text-neutral-300" aria-hidden="true">{{ icono("siguiente", "size-3.5") }}</span>{% endif %}
+        {% endif %}
+    </nav>
+</div>
+{% endmacro %}
+
+{# Interruptor (checkbox con aspecto de switch). onchange="this.form.submit()" lo envía al instante. #}
+{% macro interruptor(name, checked, disabled=false, onchange="", etiqueta="") %}
+<label class="relative inline-flex h-6 w-11 shrink-0 items-center {{ 'cursor-not-allowed opacity-60' if disabled else 'cursor-pointer' }}">
+    <input type="checkbox" name="{{ name }}" value="1" class="peer sr-only" aria-label="{{ etiqueta }}"
+        {% if checked %}checked{% endif %} {% if disabled %}disabled{% endif %}
+        {% if onchange %}onchange="{{ onchange }}"{% endif %}>
+    <span class="absolute inset-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-sefel-red peer-focus-visible:ring-2 peer-focus-visible:ring-sefel-red/40"></span>
+    <span class="absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"></span>
+</label>
+{% endmacro %}
