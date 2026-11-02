@@ -1,34 +1,153 @@
 {% extends "base.html" %}
-{% block content %}
-  <h1>Usuarios</h1>
-  <a href="/admin/users/new">Crear usuario</a>
+{% from "partials/ui.html" import icono, encabezado, stat_card, paginacion, interruptor %}
 
-  <table>
-    <thead>
-      <tr>
-        <th>Username</th><th>Email</th><th>Rol</th><th>Estado</th><th>Último login</th><th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for u in usuarios %}
-      <tr>
-        <td>{{ u.username }}</td>
-        <td>{{ u.email }}</td>
-        <td>{{ u.role.value }}</td>
-        <td>{{ "Activo" if u.is_active else "Inactivo" }}</td>
-        <td>{{ u.last_login or "—" }}</td>
-        <td>
-          <a href="/admin/users/{{ u.id }}/edit">Editar</a>
-          <a href="/admin/users/{{ u.id }}/reset-password">Reset pass</a>
-          {% if u.id != admin.id and u.is_active %}
-          <form method="post" action="/admin/users/{{ u.id }}/deactivate"
-                onsubmit="return confirm('¿Desactivar a {{ u.username }}?')">
-            <button type="submit">Desactivar</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% endblock %}
+{% block title %}Usuarios{% endblock title %}
+
+{% block content %}
+{% call encabezado("Gestor de usuarios", "Crea y actualiza las cuentas de acceso al sistema y sus roles.") %}
+    <a href="/admin/users?nuevo=1" class="btn btn-primary">{{ icono("mas") }} Nuevo usuario</a>
+{% endcall %}
+
+{# Resumen #}
+<section class="mt-8 grid grid-cols-2 gap-5 lg:grid-cols-4" aria-label="Resumen">
+    {{ stat_card("Usuarios registrados", resumen.total, "En " ~ resumen.roles ~ (" rol" if resumen.roles == 1 else " roles")) }}
+    {{ stat_card("Activos", resumen.activos, "Con acceso al sistema") }}
+    {{ stat_card("Inactivos", resumen.inactivos, "Sin acceso al sistema") }}
+    {{ stat_card("Acceso reciente", resumen.recientes, "En los últimos 7 días") }}
+</section>
+
+<div class="mt-8 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+
+    {# ---------- Listado ---------- #}
+    <section class="card overflow-hidden">
+
+        {# Los filtros se envían por GET: el buscador con Enter y los selectores al cambiar #}
+        <form method="get" action="/admin/users" class="flex flex-wrap items-center gap-3 p-5" role="search">
+            <div class="relative min-w-56 flex-1">
+                <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-neutral-400">{{ icono("buscar") }}</span>
+                <input type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre o correo…" class="field w-full pl-10">
+            </div>
+            <select name="rol" class="field select w-44" aria-label="Rol" onchange="this.form.submit()">
+                <option value="">Rol: Todos</option>
+                {% for valor, etiqueta in roles %}<option value="{{ valor }}" {% if rol == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+            </select>
+            <select name="estado" class="field select w-44" aria-label="Estado" onchange="this.form.submit()">
+                <option value="">Estado: Todos</option>
+                <option value="activo" {% if estado == "activo" %}selected{% endif %}>Activo</option>
+                <option value="inactivo" {% if estado == "inactivo" %}selected{% endif %}>Inactivo</option>
+            </select>
+        </form>
+
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[40rem] text-left">
+                <thead class="border-y border-gray-100 bg-gray-50">
+                    <tr>
+                        <th class="th">Usuario</th>
+                        <th class="th">Rol</th>
+                        <th class="th">Últ. acceso</th>
+                        <th class="th">Estado</th>
+                        <th class="th"><span class="sr-only">Acciones</span></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for u in usuarios %}
+                    {% set seleccionado = editando is not none and editando.id == u.id %}
+                    <tr class="{{ 'bg-red-50/60' if seleccionado else 'hover:bg-gray-50/70' }} {{ '' if u.is_active else 'opacity-55' }}">
+                        <td class="td">
+                            <div class="flex items-center gap-3">
+                                <span class="avatar">{{ u.full_name | iniciales }}</span>
+                                <div class="leading-tight">
+                                    <p class="text-sm font-bold text-sefel-black">{{ u.full_name }}</p>
+                                    <p class="mt-0.5 text-xs text-neutral-500">{{ u.email }}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="td"><span class="badge">{{ u.role | rol_label }}</span></td>
+                        <td class="td text-neutral-500">{{ u.last_login | fecha }}</td>
+                        <td class="td">
+                            <form method="post" action="/admin/users/{{ u.id }}/estado" class="flex items-center gap-2.5">
+                                {{ interruptor("activo", u.is_active, disabled=(u.id == admin.id), onchange="this.form.submit()",
+                                              etiqueta="Activar o desactivar a " ~ u.full_name) }}
+                                <span class="text-neutral-700">{{ "Activo" if u.is_active else "Inactivo" }}</span>
+                            </form>
+                        </td>
+                        <td class="td">
+                            <div class="flex items-center justify-end gap-3 text-neutral-500">
+                                <a href="/admin/users?editar={{ u.id }}&{{ qs_base }}" class="hover:text-sefel-black" aria-label="Editar a {{ u.full_name }}">{{ icono("editar", "size-[18px]") }}</a>
+                                <a href="/admin/users?editar={{ u.id }}&{{ qs_base }}#password" class="hover:text-sefel-black" aria-label="Cambiar contraseña de {{ u.full_name }}">{{ icono("clave", "size-[18px]") }}</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="px-5 py-12 text-center text-sm text-neutral-500">No hay usuarios que coincidan con los filtros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {{ paginacion(desde, hasta, total, pagina, paginas, base_url) }}
+    </section>
+
+    {# ---------- Panel de edición / creación ---------- #}
+    <aside class="card overflow-hidden" aria-label="Formulario de usuario">
+        {% if modo %}
+        <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <h2 class="text-[15px] font-bold text-sefel-black">{{ "Editar usuario" if modo == "editar" else "Nuevo usuario" }}</h2>
+            {% if modo == "editar" %}<span class="truncate pl-3 text-sm text-neutral-500">{{ editando.full_name }}</span>{% endif %}
+        </div>
+
+        <form method="post" action="{{ '/admin/users/' ~ editando.id if modo == 'editar' else '/admin/users' }}" class="space-y-4 p-5">
+            {% if error %}
+            <p class="rounded-lg border-l-4 border-sefel-red bg-red-50 px-3.5 py-2.5 text-sm text-sefel-red" role="alert">{{ error }}</p>
+            {% endif %}
+
+            <div>
+                <label for="full_name" class="label">Nombre completo</label>
+                <input id="full_name" name="full_name" value="{{ form.full_name }}" required autocomplete="off" class="field w-full">
+            </div>
+
+            <div>
+                <label for="username" class="label">Usuario (para iniciar sesión)</label>
+                <input id="username" name="username" value="{{ form.username }}" required autocomplete="off"
+                      {% if modo == "editar" %}readonly class="field w-full bg-gray-50 text-neutral-500"{% else %}class="field w-full"{% endif %}>
+            </div>
+
+            <div>
+                <label for="email" class="label">Correo electrónico</label>
+                <input id="email" name="email" type="email" value="{{ form.email }}" required autocomplete="off" class="field w-full">
+            </div>
+
+            <div>
+                <label for="role" class="label">Rol</label>
+                <select id="role" name="role" class="field select w-full">
+                    {% for valor, etiqueta in roles %}<option value="{{ valor }}" {% if form.role == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label for="password" class="label">Contraseña</label>
+                <input id="password" name="password" type="password" autocomplete="new-password" minlength="8"
+                      {% if modo == "crear" %}required placeholder="Mínimo 8 caracteres"{% else %}placeholder="•••••••• (sin cambios)"{% endif %}
+                      class="field w-full">
+            </div>
+
+            <div class="flex items-center justify-between pt-1">
+                <label for="is_active" class="label !mb-0">Usuario activo</label>
+                <span id="is_active_wrap">{{ interruptor("is_active", form.is_active, disabled=(modo == "editar" and editando.id == admin.id), etiqueta="Usuario activo") }}</span>
+            </div>
+
+            <div class="flex gap-3 border-t border-gray-100 pt-5">
+                <a href="/admin/users?{{ qs_base }}" class="btn btn-outline flex-1 justify-center">Cancelar</a>
+                <button type="submit" class="btn btn-primary flex-1 justify-center">{{ "Guardar cambios" if modo == "editar" else "Crear usuario" }}</button>
+            </div>
+        </form>
+        {% else %}
+        <div class="px-6 py-14 text-center">
+            <p class="text-[15px] font-bold text-sefel-black">Editar usuario</p>
+            <p class="mt-2 text-sm text-neutral-500">Elige un usuario de la lista para editarlo, o crea uno nuevo.</p>
+            <a href="/admin/users?nuevo=1" class="btn btn-outline mt-6">{{ icono("mas") }} Nuevo usuario</a>
+        </div>
+        {% endif %}
+    </aside>
+</div>
+{% endblock content %}
