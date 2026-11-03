@@ -2,6 +2,45 @@
 
 from sqlalchemy import CheckConstraint, Index, column, func
 from sqlmodel import Field, SQLModel
+from pydantic import field_validator
+
+
+class APUValidacion(SQLModel):
+    code: str = Field(max_length=50)
+    name: str = Field(max_length=150)
+    unit: str = Field(max_length=30)
+    category: str | None = Field(default=None, max_length=100)
+    description: str | None = None
+    unit_cost: int = Field(ge=0)
+
+    @field_validator("code")
+    @classmethod
+    def validar_codigo(cls, valor: str) -> str:
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("El código es obligatorio.")
+        return valor
+
+    @field_validator("name")
+    @classmethod
+    def validar_nombre(cls, valor: str) -> str:
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("El nombre es obligatorio.")
+        return valor
+
+    @field_validator("unit")
+    @classmethod
+    def validar_unidad(cls, valor: str) -> str:
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("La unidad es obligatoria.")
+        return valor
+
+    @field_validator("category", "description")
+    @classmethod
+    def limpiar_opcionales(cls, valor: str | None) -> str | None:
+        return valor.strip() or None if valor is not None else None
 
 
 class APU(SQLModel, table=True):
