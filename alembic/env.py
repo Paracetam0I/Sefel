@@ -16,6 +16,7 @@ from sqlmodel import SQLModel
 from app.core.db import engine
 from app.models.test_model import TestModel
 from app.models.user import User, Presupuesto
+from app.models.apu import APU
 
 target_metadata = SQLModel.metadata
 
