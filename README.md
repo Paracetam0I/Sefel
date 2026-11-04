@@ -110,8 +110,32 @@ Para generar los usuarios, pero ya con la tabla creada:
 ```batch
 python -m scripts.seed_admin
 ```
-# Test
-Prueba de cambios en la rama de Andres
 
-# Prueba
-Prueba Coté
+## Ejecución de pruebas automatizadas
+
+### Instalar dependencias
+
+    python -m pip install -r requirements.txt
+
+### Ejecutar todas las pruebas
+
+    python -m pytest -v
+
+### Ejecutar pruebas por área
+
+**Autenticación y roles:**
+
+    python -m pytest tests/test_auth.py -v
+
+**CRUD APU:**
+
+    python -m pytest tests/test_apu.py -v
+
+**Validaciones APU:**
+
+    python -m pytest tests/test_apu_validaciones.py -v
+
+Las pruebas utilizan una base de datos SQLite en memoria, por lo que no modifican la base de datos real de la aplicación.
+
+**Resultado esperado:** 23 pruebas aprobadas.
+
