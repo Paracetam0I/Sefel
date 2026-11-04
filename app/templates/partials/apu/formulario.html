@@ -1,0 +1,108 @@
+
+{% if error %}
+    <div class="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+        {{ error }}
+    </div>
+{% endif %}
+
+<form
+    method="post"
+    action="{{ '/apu/' ~ apu.id if modo == 'editar' else '/apu' }}"
+    hx-post="{{ '/apu/' ~ apu.id if modo == 'editar' else '/apu' }}"
+    hx-target="#modal-contenido"
+    hx-swap="innerHTML"
+>
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+
+        <div>
+            <label for="code" class="label">Código</label>
+            <input
+                id="code"
+                name="code"
+                type="text"
+                value="{{ apu.code if apu else '' }}"
+                maxlength="50"
+                required
+                class="field w-full"
+            >
+        </div>
+
+        <div>
+            <label for="name" class="label">Nombre</label>
+            <input
+                id="name"
+                name="name"
+                type="text"
+                value="{{ apu.name if apu else '' }}"
+                maxlength="150"
+                required
+                class="field w-full"
+            >
+        </div>
+
+        <div>
+            <label for="unit" class="label">Unidad</label>
+            <input
+                id="unit"
+                name="unit"
+                type="text"
+                value="{{ apu.unit if apu else '' }}"
+                maxlength="30"
+                required
+                class="field w-full"
+                placeholder="Ej. m², m³, kg"
+            >
+        </div>
+
+        <div>
+            <label for="category" class="label">Categoría</label>
+            <input
+                id="category"
+                name="category"
+                type="text"
+                value="{{ apu.category if apu and apu.category else '' }}"
+                maxlength="100"
+                class="field w-full"
+            >
+        </div>
+
+        <div class="sm:col-span-2">
+            <label for="unit_cost" class="label">Precio unitario (CLP)</label>
+            <input
+                id="unit_cost"
+                name="unit_cost"
+                type="number"
+                value="{{ apu.unit_cost if apu and apu.unit_cost is not none else '' }}"
+                min="0"
+                step="1"
+                required
+                class="field w-full"
+            >
+        </div>
+
+        <div class="sm:col-span-2">
+            <label for="description" class="label">Descripción</label>
+            <textarea
+                id="description"
+                name="description"
+                rows="4"
+                class="field w-full"
+            >{{ apu.description if apu and apu.description else '' }}</textarea>
+        </div>
+
+    </div>
+
+    <div class="mt-6 flex justify-end gap-3 border-t border-gray-100 pt-5">
+        <button
+            type="button"
+            class="btn btn-outline"
+            @click="$dispatch('cerrar-modal-apu')"
+        >
+            Cancelar
+        </button>
+
+        <button type="submit" class="btn btn-primary">
+            {{ "Guardar cambios" if modo == "editar" else "Guardar APU" }}
+        </button>
+    </div>
+</form>

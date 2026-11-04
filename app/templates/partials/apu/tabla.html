@@ -1,0 +1,111 @@
+
+{% from "partials/ui.html" import icono, paginacion, interruptor, stat_card %}
+
+<section class="mt-8 grid grid-cols-2 gap-5 lg:grid-cols-4" aria-label="Resumen">
+    {{ stat_card("APU registrados", resumen.registrados, resumen.registrados_detalle) }}
+    {{ stat_card("Activos", resumen.activos, resumen.activos_detalle) }}
+    {{ stat_card("Inactivos", resumen.inactivos, resumen.inactivos_detalle) }}
+    {{ stat_card("Precios actualizados", resumen.actualizados, resumen.actualizados_detalle) }}
+</section>
+
+<div class="overflow-x-auto">
+    <table class="w-full min-w-[52rem] text-left">
+        <thead class="border-y border-gray-100 bg-gray-50">
+            <tr>
+                <th class="th">Código</th>
+                <th class="th">Nombre</th>
+                <th class="th">Categoría</th>
+                <th class="th">Unidad</th>
+                <th class="th text-right">Precio unitario</th>
+                <th class="th">Actualizado</th>
+                <th class="th">Estado</th>
+                <th class="th text-right">Editar</th>
+            </tr>
+        </thead>
+
+        <tbody class="divide-y divide-gray-100">
+            {% for apu in apus %}
+            <tr id="apu-{{ apu.id }}" class="{{ '' if apu.is_active else 'opacity-55' }} hover:bg-gray-50/70">
+                <td class="td whitespace-nowrap text-neutral-500">
+                    {{ apu.code }}
+                </td>
+
+                <td class="td font-bold text-sefel-black">
+                    {{ apu.name }}
+                </td>
+
+                <td class="td text-neutral-700">
+                    {{ apu.category or "—" }}
+                </td>
+
+                <td class="td text-neutral-500">
+                    {{ apu.unit }}
+                </td>
+
+                <td class="td text-right font-bold text-sefel-black">
+                    {{ apu.unit_cost | clp }}
+                </td>
+
+                <td class="td text-neutral-500">
+                    {{ (apu.updated_at or apu.created_at).strftime("%d/%m/%Y") }}
+                </td>
+
+                <td class="td">
+                    <form method="post" action="/apu/{{ apu.id }}/estado"
+                          hx-post="/apu/{{ apu.id }}/estado"
+                          hx-target="#contenido-apu"
+                          hx-swap="innerHTML">
+                        <input type="hidden" name="q" value="{{ q }}">
+                        <input type="hidden" name="categoria" value="{{ categoria }}">
+                        <input type="hidden" name="estado" value="{{ estado }}">
+                        <input type="hidden" name="pagina" value="{{ pagina }}">
+
+                        {{ interruptor(
+                            "activo",
+                            apu.is_active,
+                            onchange="this.form.requestSubmit()",
+                            etiqueta="Activo" if apu.is_active else "Inactivo"
+                        ) }}
+                    </form>
+                </td>
+
+                <td class="td">
+                    <div class="flex justify-end text-neutral-500">
+                        <a
+                            href="/apu/{{ apu.id }}/editar"
+                            hx-get="/apu/{{ apu.id }}/editar"
+                            hx-target="#modal-contenido"
+                            hx-swap="innerHTML"
+                            @click="$dispatch('abrir-modal-apu')"
+                            class="hover:text-sefel-red"
+                            aria-label="Editar APU {{ apu.code }}"
+                            title="Editar APU"
+                        >
+                            {{ icono("editar", "size-[18px]") }}
+                        </a>
+                    </div>
+                </td>
+            </tr>
+
+            {% else %}
+            <tr>
+                <td colspan="8" class="td py-10 text-center text-neutral-500">
+                    {% if q or categoria or estado %}
+                        No se encontraron APU con los filtros seleccionados.
+                    {% else %}
+                        Todavía no hay APU registrados.
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<nav
+    hx-boost="true"
+    hx-target="#contenido-apu"
+    hx-swap="innerHTML"
+>
+    {{ paginacion(desde, hasta, total, pagina, paginas, base_url) }}
+</nav>

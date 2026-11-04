@@ -173,10 +173,14 @@ def _renderFormulario(
     modo: str,
     error: str | None = None,
     status_code: int = 200,
+    es_htmx: bool = False,
 ):
     return templates.TemplateResponse(
         request=request,
-        name="apu/formulario.html",
+        name=(
+    "partials/apu/formulario.html"
+    if es_htmx
+    else "apu/formulario.html"),
         status_code=status_code,
         context={
             "usuario": usuario,
@@ -196,6 +200,7 @@ def _renderLista(
     categoria: str = "",
     estado: str = "",
     pagina: int = 1,
+    es_htmx: bool = False,
 ):
     todos = session.exec(select(APU).order_by(APU.code)).all()
     filtrados = _filtrar(todos, q, categoria, estado)
@@ -227,9 +232,15 @@ def _renderLista(
         if apu.category
     })
 
+    nombre_plantilla = (
+        "partials/apu/tabla.html"
+        if es_htmx
+        else "apu.html"
+    )
+
     return templates.TemplateResponse(
         request=request,
-        name="apu.html",
+        name=nombre_plantilla,
         context={
             "usuario": usuario,
             "apus": visibles,
@@ -269,6 +280,7 @@ def listar(
         categoria=categoria,
         estado=estado,
         pagina=pagina,
+        es_htmx=request.headers.get("HX-Request") == "true",
     )
 
 
@@ -281,8 +293,13 @@ def mostrarFormulario(
     usuario: CurrentUser,
 ):
     return _renderFormulario(
-        request, usuario, None, "crear"
+        request,
+        usuario,
+        None,
+        "crear",
+        es_htmx=request.headers.get("HX-Request") == "true",
     )
+
 
 
 @router.post("/apu")
@@ -297,16 +314,26 @@ def crear(
     description: str = Form(""),
     session: Session = Depends(getSession),
 ):
-    datos, error = _validar(_datosFormulario(
-        code, name, unit, category, unit_cost, description
-    ))
+    es_htmx = request.headers.get("HX-Request") == "true"
+
+    datos, error = _validar(
+        _datosFormulario(
+            code, name, unit, category, unit_cost, description
+        )
+    )
 
     if error is None and _codigoExistente(session, datos["code"]):
         error = "Ya existe un APU con ese código."
 
     if error:
         return _renderFormulario(
-            request, usuario, datos, "crear", error, 400
+            request,
+            usuario,
+            datos,
+            "crear",
+            error,
+            200 if es_htmx else 400,
+            es_htmx=es_htmx,
         )
 
     nuevo = APU(**datos)
@@ -322,11 +349,26 @@ def crear(
             datos,
             "crear",
             "No se pudo guardar. Comprueba que el código no esté repetido.",
-            400,
+            200 if es_htmx else 400,
+            es_htmx=es_htmx,
         )
 
     flash(request, "APU creado correctamente.", "success")
+
+    if es_htmx:
+        respuesta = _renderLista(
+            request,
+            usuario,
+            session,
+            es_htmx=True,
+        )
+        respuesta.headers["HX-Retarget"] = "#contenido-apu"
+        respuesta.headers["HX-Reswap"] = "innerHTML"
+        respuesta.headers["HX-Trigger"] = "cerrar-modal-apu"
+        return respuesta
+
     return RedirectResponse(LISTA_URL, status_code=303)
+
 
 
 # Editar APU
@@ -346,8 +388,13 @@ def mostrarEdicion(
         return RedirectResponse(LISTA_URL, status_code=303)
 
     return _renderFormulario(
-        request, usuario, apu, "editar"
+        request,
+        usuario,
+        apu,
+        "editar",
+        es_htmx=request.headers.get("HX-Request") == "true",
     )
+
 
 
 @router.post("/apu/{apu_id}")
@@ -363,15 +410,19 @@ def actualizar(
     description: str = Form(""),
     session: Session = Depends(getSession),
 ):
+    es_htmx = request.headers.get("HX-Request") == "true"
+
     apu = _buscar(session, apu_id)
 
     if apu is None:
         flash(request, "El APU solicitado ya no existe.", "error")
         return RedirectResponse(LISTA_URL, status_code=303)
 
-    datos, error = _validar(_datosFormulario(
-        code, name, unit, category, unit_cost, description
-    ))
+    datos, error = _validar(
+        _datosFormulario(
+            code, name, unit, category, unit_cost, description
+        )
+    )
 
     datos["id"] = apu_id
 
@@ -382,7 +433,13 @@ def actualizar(
 
     if error:
         return _renderFormulario(
-            request, usuario, datos, "editar", error, 400
+            request,
+            usuario,
+            datos,
+            "editar",
+            error,
+            200 if es_htmx else 400,
+            es_htmx=es_htmx,
         )
 
     for campo, valor in datos.items():
@@ -402,18 +459,29 @@ def actualizar(
             datos,
             "editar",
             "No se pudieron guardar los cambios. Comprueba el código.",
-            400,
+            200 if es_htmx else 400,
+            es_htmx=es_htmx,
         )
 
     flash(request, "APU actualizado correctamente.", "success")
+
+    if es_htmx:
+        respuesta = _renderLista(
+            request,
+            usuario,
+            session,
+            es_htmx=True,
+        )
+        respuesta.headers["HX-Retarget"] = "#contenido-apu"
+        respuesta.headers["HX-Reswap"] = "innerHTML"
+        respuesta.headers["HX-Trigger"] = "cerrar-modal-apu"
+        return respuesta
+
     return RedirectResponse(LISTA_URL, status_code=303)
 
 
 # Activar / desactivar APU
 # ==========================================
-
-@router.post("/apu/{apu_id}/estado")
-
 
 @router.post("/apu/{apu_id}/estado")
 def cambiarEstado(
@@ -426,6 +494,7 @@ def cambiarEstado(
     pagina: int = Form(1),
     session: Session = Depends(getSession),
 ):
+    es_htmx = request.headers.get("HX-Request") == "true"
     apu = _buscar(session, apu_id)
 
     if apu is None:
@@ -439,9 +508,24 @@ def cambiarEstado(
         estado_actual = "activo" if apu.is_active else "inactivo"
         flash(
             request,
-            f"El APU '{apu.code}' ahora está {estado_actual}.",
+            f"El APU '{apu.code}' ahora est? {estado_actual}.",
             "success",
         )
+
+    if es_htmx:
+        respuesta = _renderLista(
+            request,
+            usuario,
+            session,
+            q=q,
+            categoria=categoria,
+            estado=estado,
+            pagina=pagina,
+            es_htmx=True,
+        )
+        respuesta.headers["HX-Retarget"] = "#contenido-apu"
+        respuesta.headers["HX-Reswap"] = "innerHTML"
+        return respuesta
 
     filtros = {
         "q": q,
@@ -457,7 +541,6 @@ def cambiarEstado(
     })
 
     destino = f"{LISTA_URL}?{parametros}" if parametros else LISTA_URL
-
     return RedirectResponse(
         f"{destino}#apu-{apu_id}",
         status_code=303,

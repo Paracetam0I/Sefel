@@ -237,3 +237,8 @@ __marimo__/
 #Variables de entorno
 .env.*
 !.env.example
+# Dependencias de Node.js
+node_modules/
+# Respaldos locales
+respaldo_*/
+*.bak
