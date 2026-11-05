@@ -47,6 +47,11 @@ class APU(SQLModel, table=True):
     __tablename__ = "apu"
 
     __table_args__ = (
+        Index(
+            "uq_apu_code_lower",
+            func.lower(column("code")),
+            unique=True,
+        ),
         CheckConstraint(
             "unit_cost >= 0",
             name="ck_apu_unit_cost_non_negative",
