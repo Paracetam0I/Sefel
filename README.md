@@ -99,6 +99,20 @@ La app guarda `user_id` y rol en una cookie firmada con `SECRET_KEY`.
 
 **Si la clave llegó a subirse a git:** rotarla es obligatorio. Borrar el archivo del repositorio no basta, porque la clave queda en el historial.
 
+## Creación de tablas
+
+# Solo crear las que falten (comportamiento anterior)
+python -m scripts.generate
+
+# Borrar tablas de modelos y recrear
+python -m scripts.generate -d
+
+# Borrar TODO (incluidas tablas ajenas) y recrear
+python -m scripts.generate -d --all
+
+# Sin preguntar (CI / scripts)
+python -m scripts.generate -d -y
+
 ## Seed
 En la raiz del proyecto existe un seed_admin.py que crea 4 usuarios básicos y los ingresa a la base de datos para hacer pruebas.
 
