@@ -1,9 +1,12 @@
-﻿from datetime import datetime, timezone
+﻿from typing import TYPE_CHECKING, List
+from datetime import datetime, timezone
 
 from sqlalchemy import CheckConstraint, Index, column, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Relationship
 from pydantic import field_validator
 
+if TYPE_CHECKING:
+    from app.models.detalle_presupuesto import DetallePresupuesto
 
 class APUValidacion(SQLModel):
     code: str = Field(max_length=50)
@@ -76,3 +79,7 @@ class APU(SQLModel, table=True):
     )
 
     updated_at: datetime | None = Field(default=None, nullable=True)
+
+    detalles_presupuesto: List["DetallePresupuesto"] = Relationship(
+        back_populates="apu",
+    )

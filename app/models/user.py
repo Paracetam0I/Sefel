@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING, List, Optional
 
 from typing import List,Optional
 from datetime import datetime, timezone
@@ -5,6 +6,9 @@ from enum import Enum
 
 from sqlalchemy import Column, Enum as SQLAlchemyEnum
 from sqlmodel import Field, SQLModel, Relationship
+
+if TYPE_CHECKING:
+    from app.models.detalle_presupuesto import DetallePresupuesto
 
 class StatusPresupuestos(str, Enum):
     ACTIVE = "ACTIVE"
@@ -75,11 +79,10 @@ class Presupuesto(SQLModel, table=True):
     id_presupuesto: Optional[int] = Field(default=None, primary_key=True)
     
     # FK (Clave Foránea): Apunta a la tabla 'usuario' y a su columna 'id'
-    id_usuario: int = Field(foreign_key="user.id", nullable=False)
+    id_usuario: int = Field(foreign_key="user.id", nullable=False, index=True)
     
     code: str = Field(max_length=50, nullable=False)
     client_name: str = Field(max_length=50, nullable=False)
-    status: str = Field(max_length=50, nullable=False)
 
     status: StatusPresupuestos = Field(
         default=StatusPresupuestos.DRAFT,
@@ -107,6 +110,10 @@ class Presupuesto(SQLModel, table=True):
     costo_directo: int | None = Field(default=None, nullable=True)
     costo_indirecto: int | None = Field(default=None, nullable=True)
     ruta_reporte: str | None = Field(default=None, max_length=75)
+    detalles: List["DetallePresupuesto"] = Relationship(
+        back_populates="presupuesto",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
 
     # Relación
     usuario: Optional[User] = Relationship(back_populates="presupuestos")
