@@ -6,6 +6,10 @@ from enum import Enum
 from sqlalchemy import Column, Enum as SQLAlchemyEnum
 from sqlmodel import Field, SQLModel, Relationship
 
+class StatusPresupuestos(str, Enum):
+    ACTIVE = "ACTIVE"
+    CLOSE = "CLOSE"
+    DRAFT = "DRAFT"
 
 class UserRole(str, Enum):
     ADMIN = "ADMIN"
@@ -76,6 +80,24 @@ class Presupuesto(SQLModel, table=True):
     code: str = Field(max_length=50, nullable=False)
     client_name: str = Field(max_length=50, nullable=False)
     status: str = Field(max_length=50, nullable=False)
+
+    status: StatusPresupuestos = Field(
+        default=StatusPresupuestos.DRAFT,
+        sa_column=Column(
+            SQLAlchemyEnum(
+                StatusPresupuestos,
+                name="status_presupuestos",
+                native_enum=False,
+                create_constraint=True,
+                values_callable=lambda enum_class: [
+                    
+                    estado.value for estado in enum_class
+                ],
+            ),
+            nullable=False,
+            server_default=StatusPresupuestos.DRAFT.value,
+        ))
+
     estimate_income: int = Field(nullable=False)
     start_date: datetime | None = Field(default=None, nullable=True)
     end_date: datetime | None = Field(default=None, nullable=True)
