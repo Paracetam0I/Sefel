@@ -1,0 +1,54 @@
+<form hx-post="{{ '/presupuestos/' ~ presupuesto.id_presupuesto if modo == 'editar' else '/presupuestos' }}"
+      hx-target="#contenido-presupuesto" hx-swap="innerHTML"
+      class="space-y-4">
+
+    {% if error %}
+    <div class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ error }}</div>
+    {% endif %}
+
+    <div class="grid grid-cols-2 gap-4">
+        <label class="block">
+            <span class="text-sm font-medium">Código</span>
+            <input name="code" value="{{ presupuesto.code }}" class="field w-full" required maxlength="50">
+        </label>
+        <label class="block">
+            <span class="text-sm font-medium">Cliente</span>
+            <input name="client_name" value="{{ presupuesto.client_name }}" class="field w-full" required maxlength="50">
+        </label>
+        <label class="block">
+            <span class="text-sm font-medium">Ingreso estimado</span>
+            <input type="number" name="estimate_income" value="{{ presupuesto.estimate_income }}" class="field w-full" required min="0">
+        </label>
+        <label class="block">
+            <span class="text-sm font-medium">Estado</span>
+            <select name="status" class="field select w-full">
+                {% for e in estados %}
+                <option value="{{ e.value }}" {% if e.value == presupuesto.status %}selected{% endif %}>
+                    {{ {"DRAFT": "Borrador", "ACTIVE": "Activo", "CLOSE": "Cerrado"}[e.value] }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="block">
+            <span class="text-sm font-medium">Inicio</span>
+            <input type="date" name="start_date" value="{{ presupuesto.start_date }}" class="field w-full">
+        </label>
+        <label class="block">
+            <span class="text-sm font-medium">Fin</span>
+            <input type="date" name="end_date" value="{{ presupuesto.end_date }}" class="field w-full">
+        </label>
+    </div>
+
+    <label class="block">
+        <span class="text-sm font-medium">Descripción</span>
+        <textarea name="description" rows="3" class="field w-full" required maxlength="500">{{ presupuesto.description }}</textarea>
+    </label>
+
+    <div class="flex justify-end gap-3 pt-2">
+        <button type="button" class="btn btn-outline"
+                @click="$dispatch('cerrar-modal-presupuesto')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">
+            {{ "Guardar cambios" if modo == "editar" else "Crear presupuesto" }}
+        </button>
+    </div>
+</form>

@@ -6,6 +6,7 @@ from enum import Enum
 
 from sqlalchemy import Column, Enum as SQLAlchemyEnum
 from sqlmodel import Field, SQLModel, Relationship
+from pydantic import BaseModel, field_validator
 
 if TYPE_CHECKING:
     from app.models.detalle_presupuesto import DetallePresupuesto
@@ -114,6 +115,21 @@ class Presupuesto(SQLModel, table=True):
         back_populates="presupuesto",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
-
     # Relación
     usuario: Optional[User] = Relationship(back_populates="presupuestos")
+
+class PresupuestoValidacion(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+    client_name: str = Field(min_length=1, max_length=50)
+    estimate_income: int = Field(ge=0)
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    description: str = Field(min_length=1, max_length=500)
+    status: StatusPresupuestos = StatusPresupuestos.DRAFT
+
+    @field_validator("code", "client_name", "description")
+    @classmethod
+    def _no_vacio(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("campo vacío")
+        return v.strip()

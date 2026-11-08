@@ -22,7 +22,7 @@ def crear_presupuesto() -> int | None:
             id_usuario=usuario.id,                     
             code="PRES-2026-001",
             client_name="Constructora Andina S.A.",    
-            status="Borrador",
+            status="DRAFT",
             estimate_income=15_000_000,                
             start_date=ahora,                          
             end_date=ahora + timedelta(days=30),       
