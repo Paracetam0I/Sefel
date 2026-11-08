@@ -25,7 +25,7 @@ from app.core.dependencies import CurrentUser, getCurrentUser
 from app.core.dependencies import OptionalUser
 from app.core.security import verifyPassword
 from app.core.db import getSession
-from app.core.routers import admin, apu, proyectos
+from app.core.routers import admin, apu, presupuestos
 from app.core.dependencies import requireRoles
 
 from app.models.user import User, UserRole
@@ -71,7 +71,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # ==================================================
 registerAuthHandlers(app, templates)
 app.include_router(admin.router)
-app.include_router(proyectos.router)
+app.include_router(presupuestos.router)
 app.include_router(apu.router)
 
 # Test de sesión 

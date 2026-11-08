@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "partials/ui.html" import icono, encabezado, stat_card %}
+
+{% block title %}Presupuestos{% endblock title %}
+
+{% block content %}
+{% call encabezado("Presupuestos", "Gestiona los presupuestos de tus proyectos.") %}
+    <button type="button" class="btn btn-outline">{{ icono("descargar") }} Exportar</button>
+    <button type="button" class="btn btn-primary"
+            hx-get="/presupuesto/nuevo"
+            hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
+            @click="$dispatch('abrir-modal-presupuesto')">
+        {{ icono("mas") }} Nuevo presupuesto
+    </button>
+{% endcall %}
+
+{# Resumen: las claves vienen de _resumen() en el router #}
+<section class="mt-8 grid grid-cols-2 gap-5 lg:grid-cols-4" aria-label="Resumen">
+    {{ stat_card("Presupuestos totales", resumen.registrados, resumen.registrados_detalle) }}
+    {{ stat_card("En borrador",         resumen.borradores,  resumen.borradores_detalle) }}
+    {{ stat_card("Activos",             resumen.activos,     resumen.activos_detalle) }}
+    {{ stat_card("Cerrados",            resumen.cerrados,    resumen.cerrados_detalle) }}
+</section>
+
+{# Listado: este div es el target HTMX que usan filtros, edición y cambio de estado #}
+<section class="card mt-8 overflow-hidden" id="contenido-presupuesto">
+    {% include "partials/presupuesto/tabla.html" %}
+</section>
+{% endblock content %}

@@ -1,0 +1,130 @@
+{% from "partials/ui.html" import icono, paginacion %}
+
+{# Etiquetas legibles para los valores del enum StatusPresupuestos #}
+{% set etiquetas = {"DRAFT": "Borrador", "ACTIVE": "Activo", "CLOSE": "Cerrado"} %}
+
+{# Filtros — cada control dispara una petición HTMX a /presupuesto #}
+<form class="flex flex-wrap items-center gap-3 p-5" role="search">
+    <div class="relative min-w-64 flex-1">
+        <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-neutral-400">
+            {{ icono("buscar") }}
+        </span>
+        <input type="search" name="q" value="{{ q }}"
+               placeholder="Buscar por código o cliente…"
+               class="field w-full pl-10"
+               hx-get="/presupuestos"
+               hx-target="#contenido-presupuesto" hx-swap="innerHTML"
+               hx-trigger="keyup changed delay:400ms"
+               hx-include="closest form">
+    </div>
+
+    <select name="estado" class="field select w-52" aria-label="Estado"
+            hx-get="/presupuestos"
+            hx-target="#contenido-presupuesto" hx-swap="innerHTML"
+            hx-trigger="change"
+            hx-include="closest form">
+        <option value="">Estado: Todos</option>
+        {% for e in estados %}
+            <option value="{{ e.value }}" {% if e.value == estado %}selected{% endif %}>
+                {{ etiquetas.get(e.value, e.value) }}
+            </option>
+        {% endfor %}
+    </select>
+</form>
+
+<div class="overflow-x-auto">
+    <table class="w-full min-w-[56rem] text-left">
+        <thead class="border-y border-gray-100 bg-gray-50">
+            <tr>
+                <th class="th">Código</th>
+                <th class="th">Presupuesto</th>
+                <th class="th">Cliente</th>
+                <th class="th">Creación</th>
+                <th class="th">Estado</th>
+                <th class="th">Período</th>
+                <th class="th text-right">Total estimado</th>
+                <th class="th"><span class="sr-only">Acciones</span></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for p in presupuestos %}
+            <tr class="hover:bg-gray-50/70" id="presupuesto-{{ p.id_presupuesto }}">
+                <td class="td whitespace-nowrap text-neutral-500">{{ p.code }}</td>
+                <td class="td font-bold text-sefel-black max-w-xs truncate"
+                    title="{{ p.description }}">{{ p.description }}</td>
+                <td class="td text-neutral-700">{{ p.client_name }}</td>
+                <td class="td whitespace-nowrap text-neutral-500">
+                    {{ p.created_at.strftime("%d/%m/%Y") }}
+                </td>
+
+                {# Badge interactivo: dropdown Alpine para cambiar de estado #}
+                <td class="td whitespace-nowrap">
+                    <div x-data="{ abierto: false }" class="relative inline-block">
+                        <button type="button"
+                                @click="abierto = !abierto"
+                                class="badge badge-{{ p.status.value | lower }} cursor-pointer"
+                                aria-haspopup="true" :aria-expanded="abierto">
+                            {{ etiquetas.get(p.status.value, p.status.value) }}
+                        </button>
+                        <div x-show="abierto" x-cloak @click.outside="abierto = false"
+                             class="absolute left-0 z-20 mt-1 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                            {% for e in estados %}
+                                {% if e.value != p.status.value %}
+                                <form hx-post="/presupuestos/{{ p.id_presupuesto }}/estado"
+                                      hx-target="#contenido-presupuesto" hx-swap="innerHTML">
+                                    <input type="hidden" name="nuevo_estado" value="{{ e.value }}">
+                                    <input type="hidden" name="q"      value="{{ q }}">
+                                    <input type="hidden" name="estado" value="{{ estado }}">
+                                    <input type="hidden" name="pagina" value="{{ pagina }}">
+                                    <button type="submit"
+                                            class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50">
+                                        {{ etiquetas.get(e.value, e.value) }}
+                                    </button>
+                                </form>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </td>
+
+                {# Período: reemplaza a "Avance" del diseño original (no hay campo de avance) #}
+                <td class="td whitespace-nowrap text-neutral-500">
+                    {% if p.start_date and p.end_date %}
+                        {{ p.start_date.strftime("%d/%m/%Y") }} — {{ p.end_date.strftime("%d/%m/%Y") }}
+                    {% elif p.start_date %}
+                        Desde {{ p.start_date.strftime("%d/%m/%Y") }}
+                    {% elif p.end_date %}
+                        Hasta {{ p.end_date.strftime("%d/%m/%Y") }}
+                    {% else %}
+                        <span class="text-neutral-400">—</span>
+                    {% endif %}
+                </td>
+
+                <td class="td whitespace-nowrap text-right font-bold text-sefel-black">
+                    {{ p.estimate_income | clp }}
+                </td>
+
+                <td class="td">
+                    <div class="flex items-center justify-end gap-3 text-neutral-500">
+                        <a href="/presupuestos/{{ p.id_presupuesto }}/editar"
+                           class="hover:text-sefel-black" aria-label="Editar {{ p.code }}"
+                           hx-get="/presupuestos/{{ p.id_presupuesto }}/editar"
+                           hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
+                           @click="$dispatch('abrir-modal-presupuesto')">
+                            {{ icono("editar", "size-[18px]") }}
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" class="td py-10 text-center text-neutral-500">
+                    No hay presupuestos que coincidan con la búsqueda.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{{ paginacion(pagina, presupuestos | length, total, pagina, paginas) }}
