@@ -1,4 +1,4 @@
-from sqlalchemy import URL
+from sqlalchemy import URL, event
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
@@ -21,6 +21,11 @@ SessionLocal = sessionmaker(
     autoflush=False,
 )
 
+@event.listens_for(engine, "connect")
+def _enable_sqlite_fks(dbapi_conn, _record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 def getSession():
     with SessionLocal() as session:

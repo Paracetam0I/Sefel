@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from sqlmodel import Session, SQLModel, select
 
 from app.core.db import engine
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, Presupuesto, StatusPresupuestos
+from app.models.detalle_presupuesto import DetallePresupuesto
 from app.core.security import hashPassword
 
 
