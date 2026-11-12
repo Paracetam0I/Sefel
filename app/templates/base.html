@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/static/css/output.css">
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/alpine.min.js" defer></script>
+    <style>[x-cloak]{display:none!important}</style>
     {% block head %}{% endblock head %}
 </head>
 <body class="{% block body_class %}bg-gray-50 text-neutral-800{% endblock body_class %}">
@@ -34,5 +35,24 @@
     </div>
 {% endblock body %}
 {% block scripts %}{% endblock scripts %}
+<div x-data="{ open: false }"
+     @abrir-modal-presupuesto.window="open = true"
+     @cerrar-modal-presupuesto.window="open = false; $refs.body.innerHTML = ''"
+     @keydown.escape.window="if (open) { open = false; $refs.body.innerHTML = '' }">
+
+    <!-- Fondo oscuro semitransparente -->
+    <div x-show="open" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+         @click.self="open = false; $refs.body.innerHTML = ''">
+
+        <!-- Tarjeta blanca del modal -->
+        <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
+            
+            <!-- Contenedor de HTMX con padding interior -->
+            <div id="modal-presupuesto-body" x-ref="body" class="p-6"></div>
+            
+        </div>
+
+    </div>
 </body>
 </html>

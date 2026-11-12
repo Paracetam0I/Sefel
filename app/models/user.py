@@ -6,7 +6,7 @@ from enum import Enum
 
 from sqlalchemy import Column, Enum as SQLAlchemyEnum
 from sqlmodel import Field, SQLModel, Relationship
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, NaiveDatetime
 
 if TYPE_CHECKING:
     from app.models.detalle_presupuesto import DetallePresupuesto
@@ -103,8 +103,10 @@ class Presupuesto(SQLModel, table=True):
         ))
 
     estimate_income: int = Field(nullable=False)
-    start_date: datetime | None = Field(default=None, nullable=True)
-    end_date: datetime | None = Field(default=None, nullable=True)
+
+    start_date: NaiveDatetime = Field(default=None)
+    end_date: NaiveDatetime = Field(default=None)
+
     description: str = Field(max_length=500, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: datetime = Field(default=None, nullable=True)
