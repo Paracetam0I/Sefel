@@ -1,0 +1,35 @@
+<input type="hidden" name="id_material" value="{{ material.id }}">
+
+<p class="mb-4 text-sm text-gray-500">
+    Material seleccionado:
+    <span class="font-semibold">{{ material.code }} · {{ material.name }}</span>
+</p>
+
+<div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+    <div>
+        <label for="unit" class="label">Unidad</label>
+        <input
+            id="unit"
+            name="unit"
+            type="text"
+            value="{{ material.unit }}"
+            maxlength="30"
+            required
+            class="field w-full"
+        >
+    </div>
+
+    <div>
+        <label for="estimated_unit_cost" class="label">Costo unitario estimado (CLP)</label>
+        <input
+            id="estimated_unit_cost"
+            name="estimated_unit_cost"
+            type="number"
+            value="{{ material.unit_cost }}"
+            min="0"
+            step="1"
+            required
+            class="field w-full"
+        >
+    </div>
+</div>

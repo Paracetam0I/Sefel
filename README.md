@@ -6,7 +6,10 @@ Proyecto de la empresa Sefel relacionado a la herramienta de presupuestación y 
 ```bash
 # 1. Crear entorno virtual e instalar dependencias
 python -m venv .venv
+#activar venv
 .venv\Scripts\activate          # Windows
+
+#instalar requerimientos
 pip install -r requirements.txt
 # 2. Compilar Tailwind (genera app/static/css/output.css)
 tailwindcss -i app/static/css/input.css -o app/static/css/output.css --minify
