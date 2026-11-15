@@ -17,6 +17,8 @@ from app.core.db import engine
 from app.models.test_model import TestModel
 from app.models.user import User, Presupuesto
 from app.models.apu import APU
+from app.models.detalle_presupuesto import DetallePresupuesto  # noqa: F401
+from app.models.material import Material  # noqa: F401
 
 target_metadata = SQLModel.metadata
 
