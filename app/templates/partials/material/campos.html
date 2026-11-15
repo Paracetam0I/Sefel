@@ -12,7 +12,7 @@
             id="unit"
             name="unit"
             type="text"
-            value="{{ material.unit }}"
+            value="{{ datos.unit if datos else material.unit }}"
             maxlength="30"
             required
             class="field w-full"
@@ -25,7 +25,7 @@
             id="estimated_unit_cost"
             name="estimated_unit_cost"
             type="number"
-            value="{{ material.unit_cost }}"
+            value="{{ datos.estimated_unit_cost if datos else material.unit_cost }}"
             min="0"
             step="1"
             required
