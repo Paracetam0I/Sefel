@@ -53,6 +53,7 @@ En una ventana privada nueva, abrir cada ruta del inventario:
 - [x] `/docs`, `/redoc` y `/openapi.json` responden 404.
 - [x] `/login` y `/static/css/output.css` son accesibles.
 - [x] Con sesión de rol insuficiente, las rutas de rol muestran la página 403 (o JSON 403 bajo `/api/`).
+- [x]Para comprobar que esta tabla coincide con las rutas reales de la app: `python -m scripts.listar_rutas`
 
 ## Pendiente
 Las rutas `/protegido` y `/prueba/*` son de prueba y se eliminarán cuando existan las páginas reales. Todavía no hay una pantalla que liste los ítems de un presupuesto. Las rutas de administración usan `requireRoles(UserRole.ADMIN)`.
