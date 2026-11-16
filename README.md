@@ -74,7 +74,23 @@ SEFEL utiliza Alembic para versionar los cambios en el esquema de la base de dat
 
 * Los modelos deben importarse en `alembic/env.py` para que Alembic los detecte.
 * La opción `--autogenerate` propone cambios; siempre se debe revisar la migración antes de aplicarla.
-* La migración inicial de prueba crea la tabla `test_model`. Este modelo es temporal y deberá retirarse cuando se definan los modelos definitivos de SEFEL.
+* La migración inicial (`0b66029e01a1`) crea la tabla temporal `test_model`; se mantiene porque es la raíz de la cadena de migraciones, pero la migración `cc5d56d0ebf4` la elimina y el modelo ya no existe.
+* `alembic/env.py` usa `render_as_batch=True` (SQLite no soporta `ALTER TABLE` completo) y apaga las claves foráneas solo mientras corre la migración, porque el modo batch recrea tablas.
+* Si tu base de datos ya tenía la tabla `detalle_presupuesto` (creada con `scripts.generate`) pero `alembic current` muestra `5691bba44b53`, márcala antes de actualizar: `python -m alembic stamp cbb87f34d7fe` y luego `python -m alembic upgrade head`.
+
+## Costos cotizados, costos reales y porcentajes
+
+* **APU**: `unit_cost` es el costo cotizado; `real_unit_cost` el costo real (si se deja vacío en el formulario, parte igual al cotizado).
+* **Ítems del presupuesto** (`DetallePresupuesto`): guardan una copia de ambos costos y el servidor calcula `subtotal = cantidad × costo cotizado` y `real_subtotal = cantidad × costo real`. Se editan en `/presupuestos/{id}/items/nuevo`.
+* **Presupuesto**: cada vez que cambia un ítem o los porcentajes se recalculan (en `app/core/calculos.py`):
+    * `total_cotizado` = suma de subtotales cotizados; `total_real` = suma de subtotales reales.
+    * `base` = costo directo fijo si es > 0; si no, `total_real`.
+    * `monto_gastos_generales` = base × % gastos generales.
+    * `monto_iva` = (base + gastos generales) × % IVA.
+    * `monto_utilidad` = (base + gastos generales) × % utilidad.
+    * `monto_costo_neto` = base + gastos generales + IVA + utilidad.
+    * Monto final = costo neto fijo si es > 0; si no, `monto_costo_neto`.
+* Los porcentajes (0–100) y los montos fijos se editan con el botón **%** junto a "Editar" en el listado de presupuestos, que también muestra los totales por categoría de APU.
 
 ## Sesiones y rotación de la SECRET_KEY
 

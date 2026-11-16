@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from app.models.apu import APU
-    from app.models.user import Presupuesto
+    from app.models.presupuesto import Presupuesto
 
 
 class DetallePresupuesto(SQLModel, table=True):
@@ -19,6 +19,12 @@ class DetallePresupuesto(SQLModel, table=True):
             "estimated_unit_cost >= 0", name="ck_detalle_costo_estimado_no_negativo"
         ),
         CheckConstraint("subtotal >= 0", name="ck_detalle_subtotal_no_negativo"),
+        CheckConstraint(
+            "real_unit_cost >= 0", name="ck_detalle_costo_real_no_negativo"
+        ),
+        CheckConstraint(
+            "real_subtotal >= 0", name="ck_detalle_subtotal_real_no_negativo"
+        ),
         CheckConstraint(
             "costo_directo >= 0", name="ck_detalle_costo_directo_no_negativo"
         ),
@@ -46,9 +52,24 @@ class DetallePresupuesto(SQLModel, table=True):
     # --- Datos de la línea ---
     unit: str = Field(max_length=30, nullable=False)
     cantidad: int = Field(default=1, nullable=False, ge=1)
+
+    # Valores cotizados (estimados)
     estimated_unit_cost: int = Field(nullable=False, ge=0)  # snapshot de APU.unit_cost
-    cantidad: int = Field(default=1, nullable=False, ge=1)
-    subtotal: int = Field(nullable=False, ge=0)         # cantidad * estimated_unit_cost
+    subtotal: int = Field(nullable=False, ge=0)             # cantidad * estimated_unit_cost
+
+    # Valores reales (lo que finalmente se paga)
+    real_unit_cost: int = Field(                             # snapshot de APU.real_unit_cost
+        default=0,
+        nullable=False,
+        ge=0,
+        sa_column_kwargs={"server_default": "0"},
+    )
+    real_subtotal: int = Field(                              # cantidad * real_unit_cost
+        default=0,
+        nullable=False,
+        ge=0,
+        sa_column_kwargs={"server_default": "0"},
+    )
 
     costo_directo: int = Field(default=0, nullable=False, ge=0)
     costo_indirecto: int = Field(default=0, nullable=False, ge=0)

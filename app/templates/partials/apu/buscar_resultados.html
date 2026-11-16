@@ -12,7 +12,10 @@
             <span>
                 <span class="font-semibold">{{ a.code }}</span> · {{ a.name }}
             </span>
-            <span class="text-gray-500">{{ a.unit_cost|clp }} / {{ a.unit }}</span>
+            <span class="text-right text-gray-500">
+                {{ a.unit_cost|clp }} / {{ a.unit }}
+                <span class="block text-xs">Real: {{ a.real_unit_cost|clp }}</span>
+            </span>
         </button>
     </li>
     {% endfor %}

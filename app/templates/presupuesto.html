@@ -24,7 +24,11 @@
 </section>
 
 {# Listado: este div es el target HTMX que usan filtros, edición y cambio de estado #}
-<section class="card mt-8 overflow-hidden" id="contenido-presupuesto">
+<section class="card mt-8 overflow-hidden" id="contenido-presupuesto"
+         hx-get="/presupuestos"
+         hx-trigger="recargar-presupuestos from:body"
+         hx-include="#filtros-presupuesto"
+         hx-swap="innerHTML">
     {% include "partials/presupuesto/tabla.html" %}
 </section>
 {% endblock content %}

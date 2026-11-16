@@ -66,8 +66,8 @@
             >
         </div>
 
-        <div class="sm:col-span-2">
-            <label for="unit_cost" class="label">Precio unitario (CLP)</label>
+        <div>
+            <label for="unit_cost" class="label">Costo cotizado (CLP)</label>
             <input
                 id="unit_cost"
                 name="unit_cost"
@@ -78,6 +78,22 @@
                 required
                 class="field w-full"
             >
+            <p class="mt-1 text-xs text-neutral-500">Precio unitario estimado con el que se crea el APU.</p>
+        </div>
+
+        <div>
+            <label for="real_unit_cost" class="label">Costo real (CLP)</label>
+            <input
+                id="real_unit_cost"
+                name="real_unit_cost"
+                type="number"
+                value="{{ apu.real_unit_cost if apu and apu.real_unit_cost is not none else '' }}"
+                min="0"
+                step="1"
+                class="field w-full"
+                placeholder="Igual al cotizado si se deja vacío"
+            >
+            <p class="mt-1 text-xs text-neutral-500">Precio unitario que finalmente se paga.</p>
         </div>
 
         <div class="sm:col-span-2">
