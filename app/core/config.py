@@ -1,11 +1,19 @@
 import os
+from pathlib import Path
 from app.core.paths import userDataPath
 import secrets
 from dotenv import load_dotenv
 
 load_dotenv() #en desarrollo, lee las variables de entorno desde el archivo .env
 
-DATABASE_PATH = userDataPath("data/sefel.db")
+# Ruta de la base de datos. SEFEL_DB_PATH permite usar otra (pruebas, demos);
+# por defecto vive en la carpeta de datos del usuario.
+DATABASE_PATH = (
+    Path(os.environ["SEFEL_DB_PATH"]).resolve()
+    if os.getenv("SEFEL_DB_PATH")
+    else userDataPath("data/sefel.db")
+)
+DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # La sesión se cierra tras este tiempo sin actividad (clics, navegación o
 # peticiones autenticadas). Se valida en backend en cada petición.
