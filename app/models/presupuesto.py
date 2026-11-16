@@ -82,8 +82,8 @@ class Presupuesto(SQLModel, table=True):
     # porcentajes en lugar de la suma de subtotales reales.
     costo_directo: int | None = Field(default=None, nullable=True)
     costo_indirecto: int | None = Field(default=None, nullable=True)
-    # Precio neto fijo acordado (si aplica). Si es > 0 reemplaza al calculado
-    # como monto final del presupuesto.
+    # Precio neto fijo acordado (si aplica). Si es > 0 reemplaza al neto
+    # calculado; el IVA se aplica sobre este valor.
     costo_neto: int = Field(default=0, nullable=False, ge=0, sa_column_kwargs={"server_default": "0"})
 
     # --- Porcentajes de gastos (0–100) ---
@@ -107,6 +107,8 @@ class Presupuesto(SQLModel, table=True):
     monto_iva: int = Field(default=0, nullable=False, sa_column_kwargs={"server_default": "0"})
     monto_utilidad: int = Field(default=0, nullable=False, sa_column_kwargs={"server_default": "0"})
     monto_costo_neto: int = Field(default=0, nullable=False, sa_column_kwargs={"server_default": "0"})
+    # Total de la cotización = neto + IVA
+    monto_total: int = Field(default=0, nullable=False, sa_column_kwargs={"server_default": "0"})
 
     ruta_reporte: str | None = Field(default=None, max_length=75)
 
@@ -123,9 +125,14 @@ class Presupuesto(SQLModel, table=True):
         return self.costo_directo if self.costo_directo else self.total_real
 
     @property
-    def monto_final(self) -> int:
-        """Monto final: el costo neto fijo si se ingresó, si no el calculado."""
+    def neto(self) -> int:
+        """Neto sobre el que se calcula el IVA: el fijo si se ingresó."""
         return self.costo_neto if self.costo_neto else self.monto_costo_neto
+
+    @property
+    def monto_final(self) -> int:
+        """Monto final del presupuesto (total con IVA)."""
+        return self.monto_total
 
 
 class PresupuestoValidacion(BaseModel):

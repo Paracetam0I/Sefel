@@ -10,6 +10,12 @@
         Iniciar sesión
     </h1>
 
+    {% if aviso %} <!-- Aviso informativo (p. ej. cierre por inactividad) -->
+    <div class="mb-4 p-3 bg-amber-50 text-amber-800 rounded text-sm" role="status">
+        {{ aviso }}
+    </div>
+    {% endif %}
+
     {% if error %} <!-- Mostrar mensaje de error si existe -->
     <div class="mb-4 p-3 bg-red-100 text-red-700 rounded text-sm" role="alert">
         {{ error }}

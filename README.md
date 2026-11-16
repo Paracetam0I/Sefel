@@ -82,14 +82,14 @@ SEFEL utiliza Alembic para versionar los cambios en el esquema de la base de dat
 
 * **APU**: `unit_cost` es el costo cotizado; `real_unit_cost` el costo real (si se deja vacío en el formulario, parte igual al cotizado).
 * **Ítems del presupuesto** (`DetallePresupuesto`): guardan una copia de ambos costos y el servidor calcula `subtotal = cantidad × costo cotizado` y `real_subtotal = cantidad × costo real`. Se editan en `/presupuestos/{id}/items/nuevo`.
-* **Presupuesto**: cada vez que cambia un ítem o los porcentajes se recalculan (en `app/core/calculos.py`):
+* **Presupuesto**: cada vez que cambia un ítem o los porcentajes se recalculan (en `app/core/calculos.py`), con el formato de la cotización:
     * `total_cotizado` = suma de subtotales cotizados; `total_real` = suma de subtotales reales.
-    * `base` = costo directo fijo si es > 0; si no, `total_real`.
-    * `monto_gastos_generales` = base × % gastos generales.
-    * `monto_iva` = (base + gastos generales) × % IVA.
-    * `monto_utilidad` = (base + gastos generales) × % utilidad.
-    * `monto_costo_neto` = base + gastos generales + IVA + utilidad.
-    * Monto final = costo neto fijo si es > 0; si no, `monto_costo_neto`.
+    * Costo directo (`base`) = costo directo fijo si es > 0; si no, `total_real`.
+    * `monto_gastos_generales` = costo directo × % gastos generales.
+    * `monto_utilidad` = costo directo × % utilidad.
+    * `monto_costo_neto` (neto) = costo directo + gastos generales + utilidad. Si hay un costo neto fijo > 0, ese reemplaza al calculado.
+    * `monto_iva` = neto × % IVA.
+    * `monto_total` = neto + IVA (monto final del presupuesto).
 * Los porcentajes (0–100) y los montos fijos se editan con el botón **%** junto a "Editar" en el listado de presupuestos, que también muestra los totales por categoría de APU.
 
 ## Sesiones y rotación de la SECRET_KEY
@@ -170,5 +170,32 @@ python -m scripts.seed_admin
 
 Las pruebas utilizan una base de datos SQLite en memoria, por lo que no modifican la base de datos real de la aplicación.
 
-**Resultado esperado:** 23 pruebas aprobadas.
+**Resultado esperado:** 91 pruebas aprobadas.
 
+## Permisos por rol
+Definidos en `app/core/permisos.py` y validados en backend (403, igual que `admin/users`); el front solo oculta lo que el rol no puede usar.
+
+| Módulo | Roles |
+|---|---|
+| Usuarios | `ADMIN` |
+| APU | `MATERIALS`, `BOTH`, `ADMIN` |
+| Presupuestos | `BUDGETS`, `BOTH`, `ADMIN` (todo); `VIEWER` (solo ver y exportar) |
+| Dashboard | Todos los autenticados (cada bloque según el rol) |
+
+No hay exclusividad por creador: los roles de edición trabajan sobre todos los presupuestos. El detalle de cada ruta está en `docs/rutas.md`.
+
+## Seguridad de sesión y cuentas
+* **Inactividad**: la sesión se cierra tras 30 min sin actividad (`INACTIVIDAD_MAXIMA_SEGUNDOS` en `app/core/config.py`). El backend guarda la marca de última actividad en la cookie firmada y la revisa en cada petición autenticada; el front (en `base.html`) cuenta el tiempo, avisa al servidor con `/api/sesion/actividad` cuando hay clics/teclas y, al vencer, cierra la sesión y muestra "Tu sesión se ha cerrado por inactividad.".
+* **Intentos fallidos** (`app/core/bloqueo.py`): a los 5 intentos seguidos la cuenta se desactiva y el login muestra "Tu cuenta ha sido desactivada. Contacta a un administrador para reactivarla.". Si es el **único ADMIN activo** no se desactiva: se reinicia el contador y se bloquea 15 min. La decisión va en un único `UPDATE` condicional, así que dos admins fallando a la vez nunca quedan ambos desactivados.
+* **Reactivación**: un ADMIN la hace desde `/admin/users` (interruptor o formulario); se limpian `failed_attempts` y el motivo del bloqueo.
+* **Auditoría**: la tabla `auditoria_cuentas` registra bloqueos, bloqueos temporales, reactivaciones y desactivaciones (cuenta, quién, cuándo y motivo). Las últimas se ven en el dashboard del ADMIN.
+
+## Exportar presupuestos a PDF
+El botón **Exportar** de Presupuestos abre un selector; al descargar, el servidor genera la cotización con ReportLab (`app/core/pdf_presupuesto.py`) y la entrega como `presupuesto-<id>-<aaaa-mm-dd>.pdf`. Los ítems muestran el costo real (la base de los porcentajes). Los datos de la empresa se configuran en `DATOS_EMPRESA` (`app/core/config.py`).
+
+## Comandos
+```powershell
+pip install -r requirements.txt     # incluye reportlab
+python -m alembic upgrade head      # aplica las migraciones
+python -m pytest -v                 # corre los tests
+```

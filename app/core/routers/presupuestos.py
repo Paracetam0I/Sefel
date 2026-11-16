@@ -2,10 +2,8 @@ from datetime import datetime, timedelta, timezone
 from math import ceil
 from urllib.parse import urlencode
 
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -13,7 +11,12 @@ from sqlmodel import Session, select
 
 from app.core.calculos import recalcularPresupuesto, totalesPorCategoria
 from app.core.db import getSession
+from app.core.pdf_presupuesto import generarPdfPresupuesto, nombreArchivo
 from app.core.dependencies import CurrentUser, requireRoles
+from app.core.permisos import (
+    ROLES_PRESUPUESTOS_LECTURA,
+    UsuarioPresupuestosEdicion,
+)
 from app.core.flash import flash
 from app.models.presupuesto import (
     PorcentajesValidacion,
@@ -21,31 +24,27 @@ from app.models.presupuesto import (
     PresupuestoValidacion,
     StatusPresupuestos,
 )
-from app.models.user import User, UserRole
 from app.templates import templates
 
 
-router = APIRouter(tags=["presupuestos"])
+# Lectura (y exportar): BUDGETS, BOTH, ADMIN y VIEWER. El resto recibe 403.
+# Los endpoints que modifican piden además un rol de edición (VIEWER -> 403).
+router = APIRouter(
+    tags=["presupuestos"],
+    dependencies=[Depends(requireRoles(*ROLES_PRESUPUESTOS_LECTURA))],
+)
 
 PRESUPUESTOS_POR_PAGINA = 10
 LISTA_URL = "/presupuestos"
-
-# Solo quienes arman presupuestos pueden cambiar porcentajes
-UsuarioPresupuestos = Annotated[
-    User,
-    Depends(requireRoles(UserRole.ADMIN, UserRole.BUDGETS, UserRole.BOTH)),
-]
 
 
 # Utilidades
 # ==========================================
 
 def _buscar(session: Session, presupuesto_id: int, usuario) -> Presupuesto | None:
-    """Busca un presupuesto asegurando que pertenece al usuario actual."""
-    presupuesto = session.get(Presupuesto, presupuesto_id)
-    if presupuesto is None or presupuesto.id_usuario != usuario.id:
-        return None
-    return presupuesto
+    """Busca un presupuesto. No hay exclusividad por creador: los permisos
+    los decide el rol (ver app/core/permisos.py)."""
+    return session.get(Presupuesto, presupuesto_id)
 
 
 def _resumen(todos: list[Presupuesto]) -> dict:
@@ -195,9 +194,9 @@ def _codigoExistente(
     id_usuario: int,
     excluir_id: int | None = None,
 ) -> bool:
+    # El código es único en todo el sistema (todos ven todos los presupuestos)
     consulta = select(Presupuesto).where(
         func.lower(Presupuesto.code) == code.casefold(),
-        Presupuesto.id_usuario == id_usuario,
     )
     if excluir_id is not None:
         consulta = consulta.where(Presupuesto.id_presupuesto != excluir_id)
@@ -337,13 +336,52 @@ def listar(
     )
 
 
+# Exportar a PDF (todos los roles con acceso a Presupuestos, VIEWER incluido)
+# ==========================================
+
+@router.get("/presupuestos/exportar")
+def mostrarExportar(
+    request: Request,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    """Selector (modal) para elegir qué presupuesto exportar."""
+    presupuestos = session.exec(
+        select(Presupuesto).order_by(Presupuesto.created_at.desc())
+    ).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/presupuesto/exportar.html",
+        context={"usuario": usuario, "presupuestos": presupuestos},
+    )
+
+
+@router.get("/presupuestos/{presupuesto_id}/pdf")
+def exportarPdf(
+    presupuesto_id: int,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    presupuesto = _buscar(session, presupuesto_id, usuario)
+    if presupuesto is None:
+        raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
+
+    return Response(
+        content=generarPdfPresupuesto(session, presupuesto),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{nombreArchivo(presupuesto)}"',
+        },
+    )
+
+
 # Crear presupuesto
 # ==========================================
 
 @router.get("/presupuestos/nuevo")
 def mostrarFormulario(
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
 ):
     return _renderFormulario(
         request,
@@ -357,7 +395,7 @@ def mostrarFormulario(
 @router.post("/presupuestos")
 def crear(
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     code: str = Form(...),
     client_name: str = Form(...),
     estimate_income: str = Form(...),
@@ -423,7 +461,7 @@ def crear(
 def mostrarEdicion(
     presupuesto_id: int,
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     session: Session = Depends(getSession),
 ):
     presupuesto = _buscar(session, presupuesto_id, usuario)
@@ -442,7 +480,7 @@ def mostrarEdicion(
 def actualizar(
     presupuesto_id: int,
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     code: str = Form(...),
     client_name: str = Form(...),
     estimate_income: str = Form(...),
@@ -519,7 +557,7 @@ def actualizar(
 def cambiarEstado(
     presupuesto_id: int,
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     nuevo_estado: str = Form(...),
     q: str = Form(""),
     estado: str = Form(""),
@@ -658,7 +696,7 @@ def mostrarPorcentajes(
 def guardarPorcentajes(
     presupuesto_id: int,
     request: Request,
-    usuario: UsuarioPresupuestos,
+    usuario: UsuarioPresupuestosEdicion,
     pct_gastos_generales: str = Form("0"),
     pct_iva: str = Form("0"),
     pct_utilidad: str = Form("0"),

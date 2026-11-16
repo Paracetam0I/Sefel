@@ -1,11 +1,13 @@
 """Cálculos de presupuestación: subtotales de ítems, totales y porcentajes.
 
-Fórmulas (los montos son CLP enteros, redondeados al peso):
-    base                   = costo_directo fijo (si > 0) o total_real
+Fórmulas (formato de la cotización; montos CLP enteros, redondeados al peso):
+    base (costo directo)   = costo_directo fijo (si > 0) o total_real
     monto_gastos_generales = base * pct_gastos_generales / 100
-    monto_iva              = (base + gastos generales) * pct_iva / 100
-    monto_utilidad         = (base + gastos generales) * pct_utilidad / 100
-    monto_costo_neto       = base + gastos generales + IVA + utilidad
+    monto_utilidad         = base * pct_utilidad / 100
+    monto_costo_neto       = base + gastos generales + utilidad
+    neto                   = costo_neto fijo (si > 0) o monto_costo_neto
+    monto_iva              = neto * pct_iva / 100
+    monto_total            = neto + IVA
 """
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -42,23 +44,24 @@ def calcularMontos(
     pct_iva: float,
     pct_utilidad: float,
     costo_directo: int | None = None,
+    costo_neto: int | None = None,
 ) -> dict:
     """Aplica los porcentajes sobre la base y devuelve los montos derivados."""
-    base = Decimal(costo_directo if costo_directo else total_real)
-    gastos_generales = _porcentaje(base, pct_gastos_generales)
-    base_con_gg = base + gastos_generales
-    iva = _porcentaje(base_con_gg, pct_iva)
-    utilidad = _porcentaje(base_con_gg, pct_utilidad)
+    base = costo_directo if costo_directo else total_real
 
-    monto_gg = _redondear(gastos_generales)
-    monto_iva = _redondear(iva)
-    monto_utilidad = _redondear(utilidad)
+    monto_gg = _redondear(_porcentaje(base, pct_gastos_generales))
+    monto_utilidad = _redondear(_porcentaje(base, pct_utilidad))
+    # Suma de montos ya redondeados para que el desglose cuadre
+    monto_costo_neto = base + monto_gg + monto_utilidad
+
+    neto = costo_neto if costo_neto else monto_costo_neto
+    monto_iva = _redondear(_porcentaje(neto, pct_iva))
     return {
         "monto_gastos_generales": monto_gg,
-        "monto_iva": monto_iva,
         "monto_utilidad": monto_utilidad,
-        # Suma de los montos ya redondeados para que el desglose cuadre
-        "monto_costo_neto": int(base) + monto_gg + monto_iva + monto_utilidad,
+        "monto_costo_neto": monto_costo_neto,
+        "monto_iva": monto_iva,
+        "monto_total": neto + monto_iva,
     }
 
 
@@ -82,6 +85,7 @@ def recalcularPresupuesto(session: Session, presupuesto: Presupuesto) -> Presupu
         presupuesto.pct_iva,
         presupuesto.pct_utilidad,
         presupuesto.costo_directo,
+        presupuesto.costo_neto,
     )
     for campo, valor in montos.items():
         setattr(presupuesto, campo, valor)

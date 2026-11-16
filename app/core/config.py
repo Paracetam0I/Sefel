@@ -7,6 +7,20 @@ load_dotenv() #en desarrollo, lee las variables de entorno desde el archivo .env
 
 DATABASE_PATH = userDataPath("data/sefel.db")
 
+# La sesión se cierra tras este tiempo sin actividad (clics, navegación o
+# peticiones autenticadas). Se valida en backend en cada petición.
+INACTIVIDAD_MAXIMA_SEGUNDOS = 30 * 60
+
+# Datos de la empresa para la cotización en PDF
+DATOS_EMPRESA = {
+    "nombre": "SEFEL LTDA.",
+    "direccion": "",
+    "rut": "",
+    "telefono": "",
+    "mail": "sefel.ltda@gmail.com",
+}
+VALIDEZ_COTIZACION_DIAS = 7
+
 def obtenerSecretKey() -> str:
     # 1) Variable de entorno o .env (desarrollo)
     clave = os.getenv("SECRET_KEY")

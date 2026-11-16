@@ -1,23 +1,36 @@
 from __future__ import annotations
 
+import time
 from typing import Annotated
 
 from fastapi import Depends, Request
 from sqlmodel import Session
 
-from app.core.db import getSession   # ajustá a tu módulo real
-from app.models.user import User      # ajustá a tu módulo real
+from app.core.config import INACTIVIDAD_MAXIMA_SEGUNDOS
+from app.core.db import getSession
 from app.models.user import User, UserRole
 
 
 SESSION_USER_KEY = "user_id"
+SESSION_ACTIVIDAD_KEY = "ultima_actividad"
+MOTIVO_INACTIVIDAD = "inactividad"
+
+
+def marcaDeTiempo() -> float:
+    """Hora actual en segundos (función aparte para poder simularla en tests)."""
+    return time.time()
+
+
+def marcarActividad(request: Request) -> None:
+    request.session[SESSION_ACTIVIDAD_KEY] = marcaDeTiempo()
 
 
 class LoginRequired(Exception):
     """Se lanza cuando una ruta necesita sesión válida y no la tiene."""
 
-    def __init__(self, request: Request) -> None:
+    def __init__(self, request: Request, motivo: str | None = None) -> None:
         self.request = request
+        self.motivo = motivo
         
 class RoleForbidden(Exception):
     """Hay sesión válida, pero el rol del usuario no alcanza para esta ruta."""
@@ -30,11 +43,26 @@ class RoleForbidden(Exception):
 def _cargar_usuario(request: Request, session: Session) -> User | None:
     """Devuelve el User logueado, o None si no hay sesión válida.
 
-    Limpia la sesión si estaba corrupta o si el usuario ya no está activo.
+    Limpia la sesión si estaba corrupta, si el usuario ya no está activo o si
+    pasaron más de INACTIVIDAD_MAXIMA_SEGUNDOS desde la última actividad.
+    En ese último caso deja request.state.sesion_expirada = True.
     """
     raw_id = request.session.get(SESSION_USER_KEY)
     if raw_id is None:
         return None
+
+    # Inactividad: la marca viaja en la cookie firmada, no se puede alterar
+    # desde el navegador; recargar la página no la renueva si ya venció.
+    ultima = request.session.get(SESSION_ACTIVIDAD_KEY)
+    try:
+        inactivo = marcaDeTiempo() - float(ultima) > INACTIVIDAD_MAXIMA_SEGUNDOS
+    except (TypeError, ValueError):
+        inactivo = True
+    if inactivo:
+        request.session.clear()
+        request.state.sesion_expirada = ultima is not None
+        return None
+
     try:
         user_id = int(raw_id)
     except (TypeError, ValueError):
@@ -46,6 +74,7 @@ def _cargar_usuario(request: Request, session: Session) -> User | None:
         request.session.clear()
         return None
 
+    marcarActividad(request)
     return user
 
 
@@ -57,7 +86,12 @@ def getCurrentUser(
     """Rutas que EXIGEN login. Corta con LoginRequired si no hay usuario."""
     user = _cargar_usuario(request, session)
     if user is None:
-        raise LoginRequired(request)
+        motivo = (
+            MOTIVO_INACTIVIDAD
+            if getattr(request.state, "sesion_expirada", False)
+            else None
+        )
+        raise LoginRequired(request, motivo)
     return user
 
 

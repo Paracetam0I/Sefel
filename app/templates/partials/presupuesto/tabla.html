@@ -1,6 +1,6 @@
 {% from "partials/ui.html" import icono, paginacion %}
-{# Botón de porcentajes: se muestra a quienes pueden modificar presupuestos #}
-{% set puede_editar = usuario and usuario.role.value in ("ADMIN", "BUDGETS", "BOTH") %}
+{# VIEWER: solo lectura y exportar (el backend responde 403 igual) #}
+{% set puede_editar = puede(usuario, "presupuestos_edicion") %}
 
 {# Etiquetas legibles para los valores del enum StatusPresupuestos #}
 {% set etiquetas = {"DRAFT": "Borrador", "ACTIVE": "Activo", "CLOSE": "Cerrado"} %}
@@ -34,7 +34,7 @@
     </select>
 </form>
 
-<div class="overflow-x-auto">
+<div class="relative overflow-x-auto">
     <table class="w-full min-w-[72rem] text-left">
         <thead class="border-y border-gray-100 bg-gray-50">
             <tr>
@@ -64,6 +64,9 @@
 
                 {# Badge interactivo: dropdown Alpine para cambiar de estado #}
                 <td class="td whitespace-nowrap">
+                    {% if not puede_editar %}
+                    <span class="badge badge-{{ p.status.value | lower }}">{{ etiquetas.get(p.status.value, p.status.value) }}</span>
+                    {% else %}
                     <div x-data="{ abierto: false }" class="relative inline-block">
                         <button type="button"
                                 @click="abierto = !abierto"
@@ -90,6 +93,7 @@
                             {% endfor %}
                         </div>
                     </div>
+                    {% endif %}
                 </td>
 
                 {# Período: reemplaza a "Avance" del diseño original (no hay campo de avance) #}
@@ -115,12 +119,13 @@
                     {{ p.total_real | clp }}
                 </td>
                 <td class="td whitespace-nowrap text-right font-bold text-sefel-black"
-                    title="{{ 'Costo neto fijo' if p.costo_neto else 'Costo neto calculado' }}">
+                    title="Total con IVA">
                     {{ p.monto_final | clp }}
                 </td>
 
                 <td class="td">
                     <div x-data class="flex items-center justify-end gap-3 text-neutral-500">
+                        {% if puede_editar %}
                         <a href="/presupuestos/{{ p.id_presupuesto }}/editar"
                            class="hover:text-sefel-black" aria-label="Editar {{ p.code }}"
                            hx-get="/presupuestos/{{ p.id_presupuesto }}/editar"
@@ -128,6 +133,7 @@
                            @click="$dispatch('abrir-modal-presupuesto')">
                             {{ icono("editar", "size-[18px]") }}
                         </a>
+                        {% endif %}
                         <a href="/presupuestos/{{ p.id_presupuesto }}/porcentajes"
                            class="hover:text-sefel-black"
                            aria-label="Porcentajes y totales de {{ p.code }}"

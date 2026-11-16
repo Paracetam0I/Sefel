@@ -56,13 +56,23 @@ def agregarItem(client, presupuesto, apu, cantidad, cotizado, real=""):
 # Cálculo puro
 # ==========================================
 
-def test_calcular_montos_aplica_porcentajes_en_cascada():
-    montos = calcularMontos(1_000_000, 10, 19, 15)
+def test_calcular_montos_reproduce_la_cotizacion_de_referencia():
+    # Valores de ejemplo-pdf.png: GG 12%, utilidad 15%, IVA 19%
+    montos = calcularMontos(17_930_895, 12, 19, 15)
 
-    assert montos["monto_gastos_generales"] == 100_000          # 10% de 1.000.000
-    assert montos["monto_iva"] == 209_000                       # 19% de 1.100.000
-    assert montos["monto_utilidad"] == 165_000                  # 15% de 1.100.000
-    assert montos["monto_costo_neto"] == 1_474_000
+    assert montos["monto_gastos_generales"] == 2_151_707        # 12% del costo directo
+    assert montos["monto_utilidad"] == 2_689_634                # 15% del costo directo
+    assert montos["monto_costo_neto"] == 22_772_236             # CD + GG + utilidad
+    assert montos["monto_iva"] == 4_326_725                     # 19% del neto
+    assert montos["monto_total"] == 27_098_961                  # neto + IVA
+
+
+def test_calcular_montos_iva_sobre_costo_neto_fijo():
+    montos = calcularMontos(1_000_000, 10, 19, 15, costo_neto=2_000_000)
+
+    assert montos["monto_costo_neto"] == 1_250_000              # el calculado se conserva
+    assert montos["monto_iva"] == 380_000                       # 19% del neto fijo
+    assert montos["monto_total"] == 2_380_000
 
 
 def test_calcular_montos_usa_costo_directo_fijo_como_base():
@@ -70,14 +80,15 @@ def test_calcular_montos_usa_costo_directo_fijo_como_base():
 
     assert montos["monto_gastos_generales"] == 200_000
     assert montos["monto_costo_neto"] == 2_200_000
+    assert montos["monto_total"] == 2_200_000
 
 
 def test_calcular_montos_redondea_y_cuadra_el_desglose():
     montos = calcularMontos(333, 12.5, 19, 7.25)
 
-    suma = (333 + montos["monto_gastos_generales"] + montos["monto_iva"]
-            + montos["monto_utilidad"])
-    assert montos["monto_costo_neto"] == suma
+    neto = 333 + montos["monto_gastos_generales"] + montos["monto_utilidad"]
+    assert montos["monto_costo_neto"] == neto
+    assert montos["monto_total"] == neto + montos["monto_iva"]
 
 
 # APU
@@ -181,18 +192,19 @@ def test_guardar_porcentajes_calcula_y_almacena_montos(
     assert response.status_code == 200
     assert response.headers["HX-Trigger"] == "recargar-presupuestos"
     assert "Obra gruesa" in response.text            # totales por categoría
-    assert "$ 1.474.000" in response.text            # monto final
+    assert "$ 1.487.500" in response.text            # total con IVA
 
     session.refresh(presupuesto)
     assert presupuesto.total_real == 1_000_000
     assert presupuesto.monto_gastos_generales == 100_000
-    assert presupuesto.monto_iva == 209_000
-    assert presupuesto.monto_utilidad == 165_000
-    assert presupuesto.monto_costo_neto == 1_474_000
-    assert presupuesto.monto_final == 1_474_000
+    assert presupuesto.monto_utilidad == 150_000
+    assert presupuesto.monto_costo_neto == 1_250_000
+    assert presupuesto.monto_iva == 237_500
+    assert presupuesto.monto_total == 1_487_500
+    assert presupuesto.monto_final == 1_487_500
 
 
-def test_costo_neto_fijo_reemplaza_al_calculado_como_monto_final(
+def test_costo_neto_fijo_reemplaza_al_calculado_y_lleva_iva(
     logged_in_client, session, presupuesto
 ):
     logged_in_client.post(
@@ -202,7 +214,8 @@ def test_costo_neto_fijo_reemplaza_al_calculado_como_monto_final(
     )
     session.refresh(presupuesto)
     assert presupuesto.costo_neto == 5_000_000
-    assert presupuesto.monto_final == 5_000_000
+    assert presupuesto.monto_iva == 950_000
+    assert presupuesto.monto_final == 5_950_000
     assert presupuesto.costo_directo is None
 
 
@@ -261,7 +274,7 @@ def test_listado_muestra_totales_cotizado_real_y_monto_final(
 ):
     presupuesto.total_cotizado = 4000
     presupuesto.total_real = 4600
-    presupuesto.monto_costo_neto = 5474
+    presupuesto.monto_total = 5474
     session.add(presupuesto)
     session.commit()
 

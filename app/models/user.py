@@ -63,6 +63,16 @@ class User(SQLModel, table=True):
         default=None,
         nullable=True,
     )
+
+    # --- Bloqueo por intentos fallidos (ver app/core/bloqueo.py) ---
+    failed_attempts: int = Field(
+        default=0, nullable=False, sa_column_kwargs={"server_default": "0"},
+    )
+    # Motivo por el que el sistema desactivó la cuenta (None = no bloqueada)
+    lock_reason: str | None = Field(default=None, max_length=255, nullable=True)
+    locked_at: datetime | None = Field(default=None, nullable=True)
+    # Bloqueo temporal: solo se usa con el único ADMIN activo, que no se desactiva
+    locked_until: datetime | None = Field(default=None, nullable=True)
     presupuestos: List["Presupuesto"] = Relationship(back_populates="usuario")
 
 

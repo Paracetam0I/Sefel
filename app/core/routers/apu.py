@@ -10,13 +10,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from pydantic import ValidationError
 from app.core.db import getSession
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import CurrentUser, requireRoles
 from app.core.flash import flash
+from app.core.permisos import ROLES_APU
 from app.models.apu import APU, APUValidacion
 from app.templates import templates
 
 
-router = APIRouter(tags=["apu"])
+# Solo MATERIALS, BOTH y ADMIN: el resto recibe 403 (igual que admin/users)
+router = APIRouter(
+    tags=["apu"],
+    dependencies=[Depends(requireRoles(*ROLES_APU))],
+)
 
 APUS_POR_PAGINA = 10
 LISTA_URL = "/apu"

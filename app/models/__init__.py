@@ -8,10 +8,12 @@ from app.models.presupuesto import (
     StatusPresupuestos,
 )
 from app.models.detalle_presupuesto import DetallePresupuesto
+from app.models.auditoria import AccionAuditoria, AuditoriaCuenta
 
 __all__ = [
     "APU", "APUValidacion",
     "User", "UserRole",
     "Presupuesto", "PresupuestoValidacion", "PorcentajesValidacion", "StatusPresupuestos",
     "DetallePresupuesto",
+    "AccionAuditoria", "AuditoriaCuenta",
 ]

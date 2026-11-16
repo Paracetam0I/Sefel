@@ -18,6 +18,7 @@ from app.models.user import User
 from app.models.presupuesto import Presupuesto
 from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto  # noqa: F401
+from app.models.auditoria import AuditoriaCuenta  # noqa: F401
 
 target_metadata = SQLModel.metadata
 

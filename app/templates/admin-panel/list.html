@@ -70,6 +70,13 @@
                                               etiqueta="Activar o desactivar a " ~ u.full_name) }}
                                 <span class="text-neutral-700">{{ "Activo" if u.is_active else "Inactivo" }}</span>
                             </form>
+                            {% if u.lock_reason %}
+                            <p class="mt-1 text-xs font-semibold text-red-700" title="Bloqueada el {{ u.locked_at | fecha }}">
+                                Bloqueada: {{ u.lock_reason }}
+                            </p>
+                            {% elif u.locked_until %}
+                            <p class="mt-1 text-xs text-amber-700">Bloqueo temporal por intentos fallidos</p>
+                            {% endif %}
                         </td>
                         <td class="td">
                             <div class="flex items-center justify-end gap-3 text-neutral-500">

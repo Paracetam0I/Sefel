@@ -7,20 +7,18 @@ from sqlmodel import Session, select
 from app.core.calculos import calcularSubtotales, recalcularPresupuesto
 from app.core.db import getSession
 from app.core.dependencies import CurrentUser, requireRoles
+from app.core.permisos import ROLES_PRESUPUESTOS_EDICION
 from app.core.flash import flash
 from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto
 from app.models.presupuesto import Presupuesto
-from app.models.user import UserRole
 from app.templates import templates
 
 
 # Solo los roles que arman presupuestos pueden agregar ítems (y buscar APUs para ello)
 router = APIRouter(
     tags=["items"],
-    dependencies=[
-        Depends(requireRoles(UserRole.ADMIN, UserRole.BUDGETS, UserRole.BOTH))
-    ],
+    dependencies=[Depends(requireRoles(*ROLES_PRESUPUESTOS_EDICION))],
 )
 
 LISTA_URL = "/presupuestos"
@@ -33,11 +31,9 @@ MAX_RESULTADOS = 8
 def _presupuestoDelUsuario(
     session: Session, presupuesto_id: int, usuario
 ) -> Presupuesto | None:
-    """Devuelve el presupuesto solo si pertenece al usuario actual."""
-    presupuesto = session.get(Presupuesto, presupuesto_id)
-    if presupuesto is None or presupuesto.id_usuario != usuario.id:
-        return None
-    return presupuesto
+    """Devuelve el presupuesto. No hay exclusividad por creador: cualquier rol
+    de edición (BUDGETS, BOTH, ADMIN) puede trabajar sobre cualquier presupuesto."""
+    return session.get(Presupuesto, presupuesto_id)
 
 
 def _entero(valor: str, minimo: int = 0) -> int | None:

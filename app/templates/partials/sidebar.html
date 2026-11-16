@@ -1,8 +1,9 @@
 {#
     Cada enlace recibe el contenido interno del <svg> (icono) vía {% call %}.
     El enlace activo se marca con aria-current="page"; el estilo vive en input.css (.nav-link).
-    Módulos: Dashboard, Proyectos, APU, Usuarios (/admin/users) y Presupuestos.
-    /proyectos, /apu y /presupuestos todavía no tienen ruta.
+    Módulos: Dashboard, APU, Usuarios (/admin/users) y Presupuestos.
+    Cada enlace se muestra solo a los roles que pueden entrar (ver app/core/permisos.py);
+    el backend igual responde 403 si se entra por URL.
 #}
 {% macro nav_item(href, label, ruta) %}
 <a href="{{ href }}" class="nav-link"
@@ -29,21 +30,24 @@
                 <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
             {% endcall %}
 
-            {% call nav_item("/proyectos", "Proyectos", ruta) %}
-                <rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>
-            {% endcall %}
 
+            {% if puede(usuario, "apu") %}
             {% call nav_item("/apu", "APU", ruta) %}
                 <path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74z"/><path d="m20 14.285 1.5.845a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74l1.5-.845"/>
             {% endcall %}
+            {% endif %}
 
+            {% if puede(usuario, "usuarios") %}
             {% call nav_item("/admin/users", "Usuarios", ruta) %}
                 <path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m14.305 16.53.923-.382"/><path d="m15.228 13.852-.923-.383"/><path d="m16.852 12.228-.383-.923"/><path d="m16.852 17.772-.383.924"/><path d="m19.148 12.228.383-.923"/><path d="m19.53 18.696-.382-.924"/><path d="m20.772 13.852.924-.383"/><path d="m20.772 16.148.924.383"/><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/>
             {% endcall %}
+            {% endif %}
 
+            {% if puede(usuario, "presupuestos") %}
             {% call nav_item("/presupuestos", "Presupuestos", ruta) %}
                 <rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/>
             {% endcall %}
+            {% endif %}
         </div>
     </nav>
 

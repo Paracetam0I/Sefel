@@ -13,6 +13,7 @@ from app.core.db import engine
 from app.models.apu import APU, APUValidacion
 from app.models.user import User, Presupuesto, UserRole
 from app.models.detalle_presupuesto import DetallePresupuesto
+from app.models.auditoria import AuditoriaCuenta
 
 
 # ---------------------------------------------------------------------------

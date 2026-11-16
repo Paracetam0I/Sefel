@@ -2,7 +2,7 @@
     Porcentajes de gastos, totales por categoría de APU y montos calculados.
     Se carga en el modal de presupuestos (#modal-presupuesto-body) o en página completa.
 #}
-{% set puede_editar = usuario and usuario.role.value in ("ADMIN", "BUDGETS", "BOTH") %}
+{% set puede_editar = puede(usuario, "presupuestos_edicion") %}
 
 {% macro pct(valor) -%}
     {{ valor if valor is string else "%g" | format(valor) }}
@@ -116,7 +116,7 @@
                     <label for="costo_neto" class="label">Costo neto fijo (CLP)</label>
                     <input id="costo_neto" name="costo_neto" type="number" min="0" step="1"
                            value="{{ datos.costo_neto }}" class="field w-full">
-                    <p class="mt-1 text-xs text-neutral-500">0 = usar el costo neto calculado como monto final.</p>
+                    <p class="mt-1 text-xs text-neutral-500">0 = usar el neto calculado (el IVA se aplica sobre el neto).</p>
                 </div>
             </div>
         </fieldset>
@@ -145,26 +145,26 @@
                 <dd>{{ presupuesto.monto_gastos_generales | clp }}</dd>
             </div>
             <div class="flex justify-between px-4 py-2.5">
-                <dt class="text-neutral-600">+ IVA ({{ pct(presupuesto.pct_iva) }}% sobre base + GG)</dt>
-                <dd>{{ presupuesto.monto_iva | clp }}</dd>
-            </div>
-            <div class="flex justify-between px-4 py-2.5">
-                <dt class="text-neutral-600">+ Utilidad ({{ pct(presupuesto.pct_utilidad) }}% sobre base + GG)</dt>
+                <dt class="text-neutral-600">+ Utilidad ({{ pct(presupuesto.pct_utilidad) }}%)</dt>
                 <dd>{{ presupuesto.monto_utilidad | clp }}</dd>
             </div>
             <div class="flex justify-between px-4 py-2.5">
-                <dt class="font-semibold text-sefel-black">= Costo neto calculado</dt>
+                <dt class="font-semibold text-sefel-black">= Neto calculado</dt>
                 <dd class="font-semibold text-sefel-black">{{ presupuesto.monto_costo_neto | clp }}</dd>
             </div>
             {% if presupuesto.costo_neto %}
             <div class="flex justify-between px-4 py-2.5">
-                <dt class="text-neutral-600">Costo neto fijo</dt>
+                <dt class="text-neutral-600">Neto fijo (reemplaza al calculado)</dt>
                 <dd>{{ presupuesto.costo_neto | clp }}</dd>
             </div>
             {% endif %}
+            <div class="flex justify-between px-4 py-2.5">
+                <dt class="text-neutral-600">+ IVA ({{ pct(presupuesto.pct_iva) }}% sobre el neto)</dt>
+                <dd>{{ presupuesto.monto_iva | clp }}</dd>
+            </div>
             <div class="flex justify-between bg-gray-50 px-4 py-3 text-base">
-                <dt class="font-bold text-sefel-black">Monto final del presupuesto</dt>
-                <dd class="font-extrabold text-sefel-black">{{ presupuesto.monto_final | clp }}</dd>
+                <dt class="font-bold text-sefel-black">Total del presupuesto</dt>
+                <dd class="font-extrabold text-sefel-black">{{ presupuesto.monto_total | clp }}</dd>
             </div>
         </dl>
     </section>
