@@ -1,18 +1,18 @@
-{% if materiales %}
+{% if apus %}
 <ul class="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white shadow-sm" role="listbox">
-    {% for m in materiales %}
+    {% for a in apus %}
     <li role="option">
         <button
             type="button"
             class="flex w-full items-center justify-between gap-4 px-3 py-2 text-left text-sm hover:bg-gray-50"
-            hx-get="/api/materiales/{{ m.id }}/autocompletar"
-            hx-target="#campos-material"
+            hx-get="/api/apu/{{ a.id }}/autocompletar"
+            hx-target="#campos-apu"
             hx-swap="innerHTML"
         >
             <span>
-                <span class="font-semibold">{{ m.code }}</span> · {{ m.name }}
+                <span class="font-semibold">{{ a.code }}</span> · {{ a.name }}
             </span>
-            <span class="text-gray-500">{{ m.unit_cost|clp }} / {{ m.unit }}</span>
+            <span class="text-gray-500">{{ a.unit_cost|clp }} / {{ a.unit }}</span>
         </button>
     </li>
     {% endfor %}

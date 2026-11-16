@@ -7,7 +7,6 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from app.models.apu import APU
-    from app.models.material import Material
     from app.models.user import Presupuesto
 
 
@@ -28,7 +27,6 @@ class DetallePresupuesto(SQLModel, table=True):
         ),
         Index("ix_detalle_id_presupuesto", "id_presupuesto"),
         Index("ix_detalle_id_apu", "id_apu"),
-        Index("ix_detalle_id_material", "id_material"),
         # Si quieres que un APU no se repita en el mismo presupuesto,
         # descomenta la siguiente línea:
         # UniqueConstraint("id_presupuesto", "id_apu", name="uq_detalle_presupuesto_apu"),
@@ -43,10 +41,6 @@ class DetallePresupuesto(SQLModel, table=True):
     )
     id_apu: int = Field(
         foreign_key="apu.id",
-        nullable=False,
-    )
-    id_material: int = Field(
-        foreign_key="material.id",
         nullable=False,
     )
     # --- Datos de la línea ---
@@ -69,4 +63,3 @@ class DetallePresupuesto(SQLModel, table=True):
     # --- Relaciones ---
     presupuesto: Optional["Presupuesto"] = Relationship(back_populates="detalles")
     apu: Optional["APU"] = Relationship(back_populates="detalles_presupuesto")
-    material: Optional["Material"] = Relationship()

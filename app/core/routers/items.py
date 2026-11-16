@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -8,12 +9,11 @@ from app.core.dependencies import CurrentUser, requireRoles
 from app.core.flash import flash
 from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto
-from app.models.material import Material
 from app.models.user import Presupuesto, UserRole
 from app.templates import templates
 
 
-# Solo los roles que arman presupuestos pueden agregar ítems
+# Solo los roles que arman presupuestos pueden agregar ítems (y buscar APUs para ello)
 router = APIRouter(
     tags=["items"],
     dependencies=[
@@ -22,6 +22,7 @@ router = APIRouter(
 )
 
 LISTA_URL = "/presupuestos"
+MAX_RESULTADOS = 8
 
 
 # Utilidades
@@ -49,29 +50,70 @@ def _entero(valor: str, minimo: int = 0) -> int | None:
 def _renderFormulario(
     request: Request,
     usuario,
-    session: Session,
     presupuesto: Presupuesto,
     datos: dict | None = None,
-    material: Material | None = None,
+    apu: APU | None = None,
     error: str | None = None,
     status_code: int = 200,
 ):
-    apus = session.exec(
-        select(APU).where(APU.is_active.is_(True)).order_by(APU.code)
-    ).all()
-
     return templates.TemplateResponse(
         request=request,
         name="item_nuevo.html",
         context={
             "usuario": usuario,
             "presupuesto": presupuesto,
-            "apus": apus,
             "datos": datos,
-            "material": material,
+            "apu": apu,
             "error": error,
         },
         status_code=status_code,
+    )
+
+
+# Búsqueda y autocompletado de APU (fragmentos HTMX)
+# ==========================================
+
+@router.get("/api/apu/buscar")
+def buscarApus(
+    request: Request,
+    session: Session = Depends(getSession),
+    q: str = "",
+):
+    termino = q.strip().lower()
+
+    consulta = select(APU).where(APU.is_active.is_(True))
+    if termino:
+        consulta = consulta.where(
+            or_(
+                func.lower(APU.code).contains(termino, autoescape=True),
+                func.lower(APU.name).contains(termino, autoescape=True),
+            )
+        )
+
+    apus = session.exec(consulta.order_by(APU.name).limit(MAX_RESULTADOS)).all()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/apu/buscar_resultados.html",
+        context={"apus": apus, "q": q.strip()},
+    )
+
+
+@router.get("/api/apu/{apu_id}/autocompletar")
+def autocompletarApu(
+    apu_id: int,
+    request: Request,
+    session: Session = Depends(getSession),
+):
+    apu = session.get(APU, apu_id)
+
+    if apu is None or not apu.is_active:
+        raise HTTPException(status_code=404, detail="APU no encontrado")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/apu/autocompletar_campos.html",
+        context={"apu": apu},
     )
 
 
@@ -90,7 +132,7 @@ def mostrarFormularioItem(
         flash(request, "El presupuesto solicitado no existe.", "error")
         return RedirectResponse(LISTA_URL, status_code=303)
 
-    return _renderFormulario(request, usuario, session, presupuesto)
+    return _renderFormulario(request, usuario, presupuesto)
 
 
 @router.post("/presupuestos/{presupuesto_id}/items")
@@ -99,7 +141,6 @@ def crearItem(
     request: Request,
     usuario: CurrentUser,
     id_apu: str = Form(""),
-    id_material: str = Form(""),
     unit: str = Form(""),
     estimated_unit_cost: str = Form(""),
     cantidad: str = Form("1"),
@@ -115,7 +156,6 @@ def crearItem(
 
     # Lo que escribió la persona, para devolverlo si hay un error
     datos = {
-        "id_apu": id_apu,
         "unit": unit,
         "estimated_unit_cost": estimated_unit_cost,
         "cantidad": cantidad,
@@ -126,7 +166,6 @@ def crearItem(
 
     # Convertir y buscar (el navegador solo manda texto)
     apu_id = _entero(id_apu, 1)
-    material_id = _entero(id_material, 1)
     costo_estimado = _entero(estimated_unit_cost)
     cant = _entero(cantidad, 1)
     directo = _entero(costo_directo)
@@ -134,15 +173,12 @@ def crearItem(
     unidad = unit.strip()
 
     apu = session.get(APU, apu_id) if apu_id else None
-    material = session.get(Material, material_id) if material_id else None
-    material_valido = material if material is not None and material.is_active else None
+    apu_valido = apu if apu is not None and apu.is_active else None
 
     # Validar, un error a la vez
     error = None
-    if apu is None or not apu.is_active:
-        error = "Selecciona un APU válido."
-    elif material_valido is None:
-        error = "Selecciona un material activo del catálogo."
+    if apu_valido is None:
+        error = "Selecciona un APU activo del catálogo."
     elif not unidad or len(unidad) > 30:
         error = "La unidad es obligatoria (máximo 30 caracteres)."
     elif costo_estimado is None:
@@ -156,15 +192,13 @@ def crearItem(
 
     if error:
         return _renderFormulario(
-            request, usuario, session, presupuesto,
-            datos=datos, material=material_valido,
-            error=error, status_code=400,
+            request, usuario, presupuesto,
+            datos=datos, apu=apu_valido, error=error, status_code=400,
         )
 
     item = DetallePresupuesto(
         id_presupuesto=presupuesto.id_presupuesto,
-        id_apu=apu.id,                         # trazabilidad
-        id_material=material_valido.id,        # trazabilidad
+        id_apu=apu_valido.id,                  # trazabilidad: de qué APU salió
         unit=unidad,                           # copia editable: lo que mandó el formulario
         estimated_unit_cost=costo_estimado,    # no se vuelve a leer del catálogo
         cantidad=cant,
@@ -180,8 +214,8 @@ def crearItem(
     except IntegrityError:
         session.rollback()
         return _renderFormulario(
-            request, usuario, session, presupuesto,
-            datos=datos, material=material_valido,
+            request, usuario, presupuesto,
+            datos=datos, apu=apu_valido,
             error="No se pudo guardar el ítem.", status_code=400,
         )
 

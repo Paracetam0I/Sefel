@@ -17,24 +17,11 @@
 
     <form method="post" action="/presupuestos/{{ presupuesto.id_presupuesto }}/items" class="space-y-6">
 
-        {# 1) APU: queda registrado en el ítem para la trazabilidad #}
+        {# 1) Buscador de APU: cada pausa de 300 ms pide la lista a /api/apu/buscar #}
         <div>
-            <label for="id_apu" class="label">APU</label>
-            <select id="id_apu" name="id_apu" required class="field select w-full">
-                <option value="">Selecciona un APU…</option>
-                {% for a in apus %}
-                <option value="{{ a.id }}" {% if datos and datos.id_apu == a.id|string %}selected{% endif %}>
-                    {{ a.code }} · {{ a.name }}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        {# 2) Buscador de material: cada pausa de 300 ms pide la lista a /api/materiales/buscar #}
-        <div>
-            <label for="buscar-material" class="label">Material</label>
+            <label for="buscar-apu" class="label">APU</label>
             <input
-                id="buscar-material"
+                id="buscar-apu"
                 type="search"
                 name="q"
                 placeholder="Buscar por código o nombre…"
@@ -42,20 +29,20 @@
                 class="field w-full"
                 x-data
                 @keydown.enter.prevent
-                hx-get="/api/materiales/buscar"
+                hx-get="/api/apu/buscar"
                 hx-trigger="input changed delay:300ms, search"
-                hx-target="#resultados-material"
+                hx-target="#resultados-apu"
                 hx-swap="innerHTML"
             >
-            <div id="resultados-material" class="mt-2"></div>
+            <div id="resultados-apu" class="mt-2"></div>
         </div>
 
-        {# 3) Unidad y costo: aquí cae la pieza que autocompleta (campos editables) #}
-        <div id="campos-material">
-            {% if material %}{% include "partials/material/campos.html" %}{% endif %}
+        {# 2) Unidad y costo: aquí cae la pieza que autocompleta (campos editables) #}
+        <div id="campos-apu">
+            {% if apu %}{% include "partials/apu/autocompletar_campos.html" %}{% endif %}
         </div>
 
-        {# 4) Cantidad y costos #}
+        {# 3) Cantidad y costos #}
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
             <div>
                 <label for="cantidad" class="label">Cantidad</label>
