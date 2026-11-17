@@ -5,7 +5,14 @@
 
 {% block content %}
 {% call encabezado("Presupuestos", "Gestiona los presupuestos de tus proyectos.") %}
-    <button type="button" class="btn btn-outline">{{ icono("descargar") }} Exportar</button>
+    <button type="button" class="btn btn-outline"
+            x-data
+            hx-get="/presupuestos/exportar"
+            hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
+            @click="$dispatch('abrir-modal-presupuesto')">
+        {{ icono("descargar") }} Exportar
+    </button>
+    {% if puede(usuario, "presupuestos_edicion") %}
     <button type="button" class="btn btn-primary"
             x-data
             hx-get="/presupuestos/nuevo"
@@ -13,6 +20,7 @@
             @click="$dispatch('abrir-modal-presupuesto')">
         {{ icono("mas") }} Nuevo presupuesto
     </button>
+    {% endif %}
 {% endcall %}
 
 {# Resumen: las claves vienen de _resumen() en el router #}
@@ -24,7 +32,11 @@
 </section>
 
 {# Listado: este div es el target HTMX que usan filtros, edición y cambio de estado #}
-<section class="card mt-8 overflow-hidden" id="contenido-presupuesto">
+<section class="card mt-8 overflow-hidden" id="contenido-presupuesto"
+         hx-get="/presupuestos"
+         hx-trigger="recargar-presupuestos from:body"
+         hx-include="#filtros-presupuesto"
+         hx-swap="innerHTML">
     {% include "partials/presupuesto/tabla.html" %}
 </section>
 {% endblock content %}

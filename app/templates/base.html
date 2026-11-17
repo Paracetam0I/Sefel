@@ -21,7 +21,7 @@
 
             {% include "partials/sidebar.html" %}
 
-            <main class="flex-1 overflow-y-auto px-12 py-10">
+            <main class="min-w-0 flex-1 overflow-y-auto px-12 py-10">
                 <div class="mx-auto w-full max-w-screen-2xl">
 
                     {% include "partials/flash.html" %}
@@ -35,6 +35,55 @@
     </div>
 {% endblock body %}
 {% block scripts %}{% endblock scripts %}
+{% if usuario %}
+{# Cierre por inactividad (el backend también lo valida en cada petición).
+   La última actividad se comparte entre pestañas con localStorage. #}
+<script>
+(() => {
+    const LIMITE_MS = {{ inactividad_ms }};
+    const LATIDO_MS = 60 * 1000;      // como mucho un aviso al servidor por minuto
+    const CLAVE = "sefel_ultima_actividad";
+    let ultimoLatido = Date.now();
+    let cerrando = false;
+
+    const leer = () => { try { return Number(localStorage.getItem(CLAVE)) || 0; } catch { return 0; } };
+    const guardar = (t) => { try { localStorage.setItem(CLAVE, String(t)); } catch {} };
+    let ultima = Date.now();
+    guardar(ultima);
+
+    const cerrar = () => {
+        if (cerrando) return;
+        cerrando = true;
+        fetch("/logout?motivo=inactividad", { method: "POST" })
+            .finally(() => { window.location.href = "/login?motivo=inactividad"; });
+    };
+
+    const actividad = () => {
+        ultima = Date.now();
+        guardar(ultima);
+        if (ultima - ultimoLatido >= LATIDO_MS) {
+            ultimoLatido = ultima;
+            fetch("/api/sesion/actividad", { method: "POST" })
+                .then((r) => { if (r.status === 401) cerrar(); })
+                .catch(() => {});
+        }
+    };
+
+    ["click", "keydown", "scroll", "touchstart"].forEach((evento) =>
+        document.addEventListener(evento, actividad, { capture: true, passive: true }));
+    // Toda petición HTMX ya renueva la sesión en el servidor
+    document.addEventListener("htmx:afterRequest", () => {
+        ultima = ultimoLatido = Date.now();
+        guardar(ultima);
+    });
+
+    setInterval(() => {
+        const referencia = Math.max(ultima, leer());
+        if (Date.now() - referencia >= LIMITE_MS) cerrar();
+    }, 15 * 1000);
+})();
+</script>
+{% endif %}
 <div x-data="{ open: false }"
      @abrir-modal-presupuesto.window="open = true"
      @cerrar-modal-presupuesto.window="open = false; $refs.body.innerHTML = ''"

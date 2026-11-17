@@ -1,158 +1,275 @@
-# Sefel
-Proyecto de la empresa Sefel relacionado a la herramienta de presupuestación y administración de precios unitarios
+# SEFEL · Presupuestación y precios unitarios
 
-## Inicio rápido
+Herramienta de escritorio de **SEFEL Ingeniería & Construcción** para administrar el catálogo de APU (análisis de precios unitarios), armar presupuestos con costos cotizados y reales, aplicar gastos generales, utilidad e IVA, y exportar cotizaciones en PDF.
 
-```bash
-# 1. Crear entorno virtual e instalar dependencias
+**Stack:** FastAPI · SQLModel/SQLAlchemy · Alembic · SQLite · Jinja2 + HTMX + Alpine.js · Tailwind CSS · ReportLab · pywebview (ventana de escritorio).
+
+---
+
+## Índice
+1. [Requisitos](#1-requisitos)
+2. [Instalación](#2-instalación)
+3. [Iniciar la aplicación](#3-iniciar-la-aplicación)
+4. [Usuarios de prueba](#4-usuarios-de-prueba)
+5. [Datos de ejemplo (seeds)](#5-datos-de-ejemplo-seeds)
+6. [Dónde se guardan los datos](#6-dónde-se-guardan-los-datos)
+7. [Módulos y permisos](#7-módulos-y-permisos)
+8. [Cómo funciona](#8-cómo-funciona)
+9. [Base de datos y migraciones](#9-base-de-datos-y-migraciones)
+10. [Pruebas](#10-pruebas)
+11. [Empaquetado (ejecutable)](#11-empaquetado-ejecutable)
+12. [SECRET_KEY y sesiones](#12-secret_key-y-sesiones)
+13. [Estructura del proyecto](#13-estructura-del-proyecto)
+
+---
+
+## 1. Requisitos
+- Windows 10/11 (la ventana de escritorio usa WebView2, incluido en Windows).
+- Python 3.12 o superior.
+- Git.
+
+## 2. Instalación
+Todos los comandos se ejecutan desde la raíz del repositorio.
+
+```powershell
+# 1. Crear y activar el entorno virtual
 python -m venv .venv
-#activar venv
-.venv\Scripts\activate          # Windows
+.venv\Scripts\activate
 
-#instalar requerimientos
+# 2. Instalar dependencias
 pip install -r requirements.txt
-# 2. Compilar Tailwind (genera app/static/css/output.css)
+
+# 3. Compilar el CSS de Tailwind (genera app/static/css/output.css)
 tailwindcss -i app/static/css/input.css -o app/static/css/output.css --minify
-# 3. Ejecutar en desarrollo
-python client.py
 ```
 
+> El paso 3 solo es necesario si cambias plantillas o estilos: `output.css` ya viene versionado. La primera vez, `tailwindcss` descarga su ejecutable.
 
-## Build (empaquetado)
+## 3. Iniciar la aplicación
+Un solo comando prepara todo y abre la ventana:
 
-Para generar el ejecutable **usa siempre el spec versionado**:
-```bash
-pyinstaller build.spec
-
-El ejecutable queda en `dist/`.
+```powershell
+python -m scripts.iniciar
 ```
 
-> ⚠️ **No ejecutes `pyinstaller client.py` directamente.** PyInstaller genera un `.spec` autogenerado que no debe subirse al repositorio. El único spec válido es `build.spec`.
+El script `scripts/iniciar.py`:
+1. **Verifica la base de datos.** Si no existe o está vacía, crea todas las tablas y la marca con la última migración. Si ya existe, aplica las migraciones pendientes.
+2. **Verifica que haya un ADMIN activo.** Si no hay ninguno, crea los usuarios de `scripts/seed_admin.py` (ver [Usuarios de prueba](#4-usuarios-de-prueba)).
+3. **Elige el puerto y lo muestra** (`Puerto: 54123 -> http://127.0.0.1:54123`).
+4. **Abre la interfaz de escritorio** (`client.py`).
 
-Antes de buildear, asegúrate de haber compilado el CSS de Tailwind (paso 2).
+Opciones:
 
-## Estructura
+| Opción | Qué hace |
+|---|---|
+| `--puerto 8765` | Usa ese puerto en vez de uno libre al azar (falla si está ocupado). |
+| `--demo` | Además siembra APU y presupuestos de ejemplo (no duplica si ya existen). |
+| `--solo-servidor` | Levanta solo el servidor, sin ventana: abre la URL mostrada en el navegador. |
+| `--solo-verificar` | Prepara base de datos y usuarios, y termina sin abrir la app. |
+
+Ejemplo de salida:
 ```text
-app/
-├── main.py              # Aplicación FastAPI
-└── static/              # HTML, CSS compilado, JS (HTMX + Alpine)
-client.py                # Lanzador de la ventana (pywebview)
-build.spec               # Configuración de PyInstaller (¡no borrar!)
-requirements.txt
+============================================================
+SEFEL · inicio
+============================================================
+Base de datos: C:\Users\<usuario>\AppData\Local\inacap\APU sefel\data\sefel.db
+  -> no existía: tablas creadas (revisión 59241f60df74)
+Administrador: creados los usuarios de seed (admin, materiales, presupuestos, viewer); entra con 'admin'
+Puerto: 54123  ->  http://127.0.0.1:54123
+============================================================
 ```
 
-# Sefel
-Proyecto de la empresa Sefel relacionado a la herramienta de presupuestación y administración de precios unitarios
+Otras formas de arrancar:
+```powershell
+python client.py            # ventana de escritorio, puerto libre (también prepara BD y admin)
+python client.py 8765       # ventana de escritorio, puerto fijo
+uvicorn app.main:app --reload --port 8765   # desarrollo con recarga automática (sin verificaciones)
+```
 
-## Migraciones de base de datos (Alembic)
+> La preparación de la base de datos y del administrador vive en `app/core/inicializacion.py`, así que también la hacen `client.py` y el ejecutable. La diferencia: `scripts.iniciar` crea **los 4 usuarios de prueba**, mientras que `client.py`/el ejecutable crean **solo `admin`** (una instalación real no necesita cuentas de prueba).
 
-SEFEL utiliza Alembic para versionar los cambios en el esquema de la base de datos. La configuración de conexión se obtiene desde `app/core/db.py` mediante `alembic/env.py`, que importa los modelos de SQLModel y utiliza `SQLModel.metadata`.
+## 4. Usuarios de prueba
+Los crea `scripts/seed_admin.py` (automáticamente desde `scripts.iniciar` si no hay ningún ADMIN, o a mano con `python -m scripts.seed_admin`).
 
-### Flujo de trabajo
+Al abrir el ejecutable (o `python client.py`) sin ningún ADMIN activo se crea solo `admin`.
 
-1. **Generar una migración** después de modificar o crear modelos:
+| Usuario | Contraseña | Rol |
+|---|---|---|
+| `admin` | `admin123` | ADMIN |
+| `materiales` | `materiales123` | MATERIALS |
+| `presupuestos` | `presupuestos123` | BUDGETS |
+| `viewer` | `viewer123` | VIEWER |
 
-   ```powershell
-   python -m alembic revision --autogenerate -m "descripcion_del_cambio"
-   ```
+> ⚠️ Son credenciales de desarrollo. En una instalación real cámbialas desde **Usuarios** apenas entres.
 
-2. **Revisar el archivo generado** dentro de `alembic/versions/`. Comprobar que las operaciones coincidan con los cambios esperados antes de aplicarlas.
+## 5. Datos de ejemplo (seeds)
+Todas las seeds son **idempotentes**: se identifican por código/usuario y no duplican lo que ya existe.
 
-3. **Aplicar las migraciones pendientes**:
+```powershell
+python -m scripts.seed_admin          # 4 usuarios de prueba (--create-tables crea las tablas; --update-passwords resetea claves)
+python -m scripts.seed_apus           # catálogo de 17 APU en 7 categorías (uno inactivo)
+python -m scripts.seed_presupuestos   # 3 presupuestos con ítems y porcentajes (siembra los APU si faltan)
+```
 
-   ```powershell
-   python -m alembic upgrade head
-   ```
+- **APU** (`scripts/seed_apus.py`): obras preliminares, movimiento de tierra, obra gruesa, pavimentos, terminaciones, instalaciones y obras finales, con costo cotizado y real.
+- **Presupuestos** (`scripts/seed_presupuestos.py`): `PRE-2026-001` (activo), `PRE-2026-002` (borrador) y `PRE-2026-003` (cerrado), a nombre del usuario `presupuestos` (o del primer ADMIN). Sus totales se calculan con la misma lógica que la app. Requiere haber corrido `seed_admin`.
 
-4. **Consultar la revisión aplicada**:
+Para tenerlo todo de una vez: `python -m scripts.iniciar --demo`.
 
-   ```powershell
-   python -m alembic current
-   ```
+## 6. Dónde se guardan los datos
+En la carpeta de datos del usuario: `%LOCALAPPDATA%\inacap\APU sefel\`
+
+| Archivo | Contenido |
+|---|---|
+| `data\sefel.db` | Base de datos SQLite |
+| `logs\sefel.log` | Registro de la aplicación (rotativo) |
+| `secret_key.txt` | Clave de firma de las sesiones (si no hay `SECRET_KEY` en el entorno) |
+
+Para usar **otra base de datos** (pruebas, demos) sin tocar la tuya, define `SEFEL_DB_PATH`:
+```powershell
+$env:SEFEL_DB_PATH = "C:\temp\sefel-demo.db"
+python -m scripts.iniciar --demo
+```
+
+## 7. Módulos y permisos
+Los roles por módulo están en `app/core/permisos.py` y se validan en el **backend**: un rol sin permiso recibe **403** aunque entre por URL. El front solo oculta lo que el rol no puede usar.
+
+| Módulo | Roles con acceso |
+|---|---|
+| Dashboard | Todos los autenticados (cada bloque según el rol) |
+| APU | `MATERIALS`, `BOTH`, `ADMIN` |
+| Presupuestos | `BUDGETS`, `BOTH`, `ADMIN` (todo) · `VIEWER` (solo ver y exportar) |
+| Usuarios | `ADMIN` |
+
+No hay exclusividad por creador: los roles de edición trabajan sobre todos los presupuestos. El detalle de cada ruta y cómo responde (página, HTMX o API) está en [`docs/rutas.md`](docs/rutas.md).
+
+## 8. Cómo funciona
+
+### Costos cotizados y reales
+- **APU:** `unit_cost` es el costo cotizado; `real_unit_cost`, el costo real (si se deja vacío, parte igual al cotizado).
+- **Ítems del presupuesto:** guardan una copia de ambos costos; el servidor calcula `subtotal = cantidad × cotizado` y `real_subtotal = cantidad × real`. Se agregan y editan en `/presupuestos/{id}/items/nuevo` (ícono **+** en el listado).
+
+### Porcentajes y totales del presupuesto
+Se recalculan en `app/core/calculos.py` cada vez que cambia un ítem o un porcentaje, con el formato de la cotización:
+
+| Concepto | Cálculo |
+|---|---|
+| Costo directo | Costo directo fijo si es > 0; si no, `total_real` (suma de subtotales reales) |
+| Gastos generales | Costo directo × % GG |
+| Utilidad | Costo directo × % utilidad |
+| Neto | Costo directo + GG + utilidad (o el costo neto fijo, si es > 0) |
+| IVA | Neto × % IVA |
+| **Total** | Neto + IVA |
+
+Los porcentajes (0–100) y los montos fijos se editan con el botón **%** del listado, que también muestra los totales por categoría de APU.
+
+### Exportar a PDF
+El botón **Exportar** de Presupuestos abre un selector; el servidor genera la cotización con ReportLab (`app/core/pdf_presupuesto.py`) y la descarga como `presupuesto-<id>-<aaaa-mm-dd>.pdf`. Los ítems muestran el costo real (la base de los porcentajes). Los datos de la empresa se configuran en `DATOS_EMPRESA` (`app/core/config.py`).
+
+### Seguridad
+- **Inactividad:** la sesión se cierra tras 30 min sin actividad (`INACTIVIDAD_MAXIMA_SEGUNDOS`). El backend lo valida en cada petición y el front cierra la sesión y muestra *"Tu sesión se ha cerrado por inactividad."*.
+- **Intentos fallidos** (`app/core/bloqueo.py`): a los 5 intentos seguidos la cuenta se desactiva. Si es el **único ADMIN activo** no se desactiva: queda bloqueada 15 min. Dos admins fallando a la vez nunca quedan ambos desactivados.
+- **Reactivación:** un ADMIN la hace desde **Usuarios**; se limpia el contador y el motivo del bloqueo.
+- **Auditoría:** la tabla `auditoria_cuentas` registra bloqueos, reactivaciones y desactivaciones (cuenta, quién, cuándo, motivo). Las últimas aparecen en el dashboard del ADMIN.
+
+## 9. Base de datos y migraciones
+El esquema se versiona con **Alembic**. `alembic/env.py` toma la conexión de `app/core/db.py` y los modelos de `SQLModel.metadata`.
+
+### Flujo al cambiar un modelo
+```powershell
+# 1. Generar la migración
+python -m alembic revision --autogenerate -m "descripcion_del_cambio"
+# 2. Revisar el archivo en alembic/versions/ (autogenerate solo propone)
+# 3. Aplicarla
+python -m alembic upgrade head
+# Ver la revisión aplicada
+python -m alembic current
+```
 
 ### Consideraciones
+- Todo modelo nuevo debe importarse en `alembic/env.py` y en `app/models/__init__.py`.
+- `env.py` usa `render_as_batch=True` (SQLite no soporta `ALTER TABLE` completo) y apaga las claves foráneas solo mientras migra, porque el modo batch recrea tablas.
+- Alembic **no detecta** cambios en restricciones `CHECK`: agrégalas a mano en la migración.
+- La migración inicial (`0b66029e01a1`) crea la tabla temporal `test_model`; se mantiene porque es la raíz de la cadena, y `cc5d56d0ebf4` la elimina.
+- Si una base de datos ya tenía `detalle_presupuesto` (creada con `scripts.generate`) pero `alembic current` muestra `5691bba44b53`: `python -m alembic stamp cbb87f34d7fe` y luego `python -m alembic upgrade head`.
 
-* Los modelos deben importarse en `alembic/env.py` para que Alembic los detecte.
-* La opción `--autogenerate` propone cambios; siempre se debe revisar la migración antes de aplicarla.
-* La migración inicial de prueba crea la tabla `test_model`. Este modelo es temporal y deberá retirarse cuando se definan los modelos definitivos de SEFEL.
+### Crear o recrear tablas sin Alembic (`scripts.generate`)
+Útil para pruebas rápidas; en el día a día usa `scripts.iniciar` o Alembic.
+```powershell
+python -m scripts.generate           # crea solo las tablas que falten
+python -m scripts.generate -d        # borra las tablas de los modelos y las recrea (pide confirmación)
+python -m scripts.generate -d --all  # borra TODO, incluidas tablas ajenas
+python -m scripts.generate -d -y     # sin preguntar
+```
 
-## Sesiones y rotación de la SECRET_KEY
+## 10. Pruebas
+Usan SQLite en memoria (o archivos temporales): **no tocan** la base de datos real.
 
-La app guarda `user_id` y rol en una cookie firmada con `SECRET_KEY`.
+```powershell
+python -m pytest -v                                   # todas (103)
+python -m pytest tests/test_auth.py -v                # login y roles
+python -m pytest tests/test_permisos_seguridad.py -v  # permisos, bloqueo e inactividad
+python -m pytest tests/test_costos_presupuesto.py -v  # costos, porcentajes y totales
+python -m pytest tests/test_exportar_pdf.py -v        # exportación a PDF
+python -m pytest tests/test_seeds_inicio.py -v        # seeds y script de inicio
+```
+
+Para revisar que `docs/rutas.md` coincide con las rutas reales: `python -m scripts.listar_rutas`.
+
+## 11. Empaquetado (ejecutable)
+Usa **siempre** el spec versionado:
+```powershell
+pyinstaller build.spec
+```
+El ejecutable queda en `dist/`. Antes de empaquetar, compila el CSS de Tailwind.
+
+Al abrirse, el ejecutable **prepara la base de datos** en la carpeta de datos del usuario: si no existe la crea con todas las tablas, y si viene de una versión anterior aplica las migraciones pendientes (por eso `build.spec` incluye `alembic/` y `alembic.ini`). Si no hay ningún ADMIN activo crea `admin` / `admin123`. Si algo falla, muestra el error en una ventana.
+
+> ⚠️ No ejecutes `pyinstaller client.py` directamente: genera un `.spec` automático que no debe subirse. El único válido es `build.spec`.
+
+## 12. SECRET_KEY y sesiones
+La sesión (usuario y última actividad) va en una cookie firmada con `SECRET_KEY`.
 
 **De dónde sale la clave (en orden):**
-1. Variable de entorno o archivo `.env` (desarrollo).
-2. Archivo `secret_key.txt` en la carpeta de datos del usuario (producción).
+1. Variable de entorno o archivo `.env` (desarrollo; ver `.env.example`).
+2. `secret_key.txt` en la carpeta de datos del usuario (producción).
 3. Si no existe ninguna, se genera sola en la primera ejecución.
 
 **Cómo rotarla si se filtra:**
+- *Desarrollo:* genera una nueva con `python -c "import secrets; print(secrets.token_hex(32))"`, reemplázala en `.env` y reinicia la app.
+- *Ejecutable:* cierra la app, borra `secret_key.txt` de `%LOCALAPPDATA%\inacap\APU sefel\` y vuelve a abrirla.
 
-- *Desarrollo:*
-  1. Generar una nueva: `python -c "import secrets; print(secrets.token_hex(32))"`
-  2. Reemplazar el valor de `SECRET_KEY` en `.env`.
-  3. Reiniciar la app.
+Todas las sesiones activas se invalidan. Si la clave llegó a subirse a git, rotarla es obligatorio: borrarla del repositorio no basta, queda en el historial.
 
-- *Producción (ejecutable):*
-  1. Cerrar la app.
-  2. Borrar `secret_key.txt` en la carpeta de datos del usuario
-     (`%LOCALAPPDATA%\inacap\APU sefel\`).
-  3. Abrir la app: se genera una clave nueva automáticamente.
-
-**Efecto:** todas las sesiones activas se invalidan y los usuarios deben iniciar sesión de nuevo.
-
-**Si la clave llegó a subirse a git:** rotarla es obligatorio. Borrar el archivo del repositorio no basta, porque la clave queda en el historial.
-
-## Creación de tablas
-
-# Solo crear las que falten (comportamiento anterior)
-python -m scripts.generate
-
-# Borrar tablas de modelos y recrear
-python -m scripts.generate -d
-
-# Borrar TODO (incluidas tablas ajenas) y recrear
-python -m scripts.generate -d --all
-
-# Sin preguntar (CI / scripts)
-python -m scripts.generate -d -y
-
-## Seed
-En la raiz del proyecto existe un seed_admin.py que crea 4 usuarios básicos y los ingresa a la base de datos para hacer pruebas.
-
-Para generar los usuarios Y la tabla de usuario:
-```batch
-python -m scripts.seed_admin --create-tables
+## 13. Estructura del proyecto
+```text
+app/
+├── main.py                 # Aplicación FastAPI: login, logout, registro de routers
+├── templates.py            # Configuración de Jinja2 (filtros y funciones globales)
+├── core/
+│   ├── config.py           # Rutas de datos, SECRET_KEY, inactividad, datos de la empresa
+│   ├── db.py               # Motor SQLite y sesión
+│   ├── dependencies.py     # Usuario actual, control de inactividad, requireRoles
+│   ├── permisos.py         # Roles por módulo
+│   ├── bloqueo.py          # Intentos fallidos y auditoría de cuentas
+│   ├── inicializacion.py   # Crear/migrar la BD y asegurar un ADMIN al arrancar
+│   ├── calculos.py         # Subtotales, porcentajes y totales
+│   ├── pdf_presupuesto.py  # Cotización en PDF (ReportLab)
+│   └── routers/            # admin, apu, items, presupuestos, dashboard
+├── models/                 # User, APU, Presupuesto, DetallePresupuesto, AuditoriaCuenta
+├── templates/              # Páginas y fragmentos HTMX
+└── static/                 # CSS compilado, JS (HTMX + Alpine), imágenes
+alembic/                    # Migraciones
+scripts/
+├── iniciar.py              # Inicio: BD, admin, puerto y ventana
+├── seed_admin.py           # Usuarios de prueba
+├── seed_apus.py            # Catálogo de APU de ejemplo
+├── seed_presupuestos.py    # Presupuestos de ejemplo
+├── generate.py             # Crear/recrear tablas sin Alembic
+└── listar_rutas.py         # Lista las rutas de la app
+tests/                      # Pruebas (pytest)
+docs/rutas.md               # Rutas y su protección
+client.py                   # Lanzador de la ventana de escritorio (pywebview)
+build.spec                  # Configuración de PyInstaller (¡no borrar!)
+CONVENIOS.md                # Convenciones de nombres y ramas
 ```
-Para generar los usuarios, pero ya con la tabla creada:
-```batch
-python -m scripts.seed_admin
-```
-
-## Ejecución de pruebas automatizadas
-
-### Instalar dependencias
-
-    python -m pip install -r requirements.txt
-
-### Ejecutar todas las pruebas
-
-    python -m pytest -v
-
-### Ejecutar pruebas por área
-
-**Autenticación y roles:**
-
-    python -m pytest tests/test_auth.py -v
-
-**CRUD APU:**
-
-    python -m pytest tests/test_apu.py -v
-
-**Validaciones APU:**
-
-    python -m pytest tests/test_apu_validaciones.py -v
-
-Las pruebas utilizan una base de datos SQLite en memoria, por lo que no modifican la base de datos real de la aplicación.
-
-**Resultado esperado:** 23 pruebas aprobadas.
-

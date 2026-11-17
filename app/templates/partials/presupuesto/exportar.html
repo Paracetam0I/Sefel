@@ -1,0 +1,40 @@
+{# Selector para exportar un presupuesto a PDF (se carga en el modal de presupuestos) #}
+{% set etiquetas = {"DRAFT": "Borrador", "ACTIVE": "Activo", "CLOSE": "Cerrado"} %}
+<div class="space-y-5"
+     x-data="{ id: '{{ presupuestos[0].id_presupuesto if presupuestos else '' }}' }">
+    <div>
+        <h2 class="text-xl font-bold text-sefel-black">Exportar presupuesto</h2>
+        <p class="mt-1 text-sm text-neutral-500">
+            Elige un presupuesto para descargar su cotización en PDF.
+        </p>
+    </div>
+
+    {% if presupuestos %}
+    <div>
+        <label for="presupuesto-exportar" class="label">Presupuesto</label>
+        <select id="presupuesto-exportar" x-model="id" class="field select w-full">
+            {% for p in presupuestos %}
+            <option value="{{ p.id_presupuesto }}">
+                {{ p.code }} · {{ p.client_name }} · {{ etiquetas.get(p.status.value, p.status.value) }} · {{ p.monto_total | clp }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% else %}
+    <p class="rounded-lg bg-gray-50 p-4 text-sm text-neutral-500">No hay presupuestos para exportar.</p>
+    {% endif %}
+
+    <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
+        <button type="button" class="btn btn-outline"
+                @click="$dispatch('cerrar-modal-presupuesto')">Cancelar</button>
+        {% if presupuestos %}
+        {# Enlace normal (no HTMX) para que el navegador descargue el archivo #}
+        <a class="btn btn-primary"
+           :href="'/presupuestos/' + id + '/pdf'"
+           href="/presupuestos/{{ presupuestos[0].id_presupuesto }}/pdf"
+           @click="setTimeout(() => $dispatch('cerrar-modal-presupuesto'), 300)">
+            Descargar PDF
+        </a>
+        {% endif %}
+    </div>
+</div>

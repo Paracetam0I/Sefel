@@ -73,4 +73,72 @@
         </div>
     </form>
 </section>
+{# Ítems ya asignados: costo cotizado vs real, editables en línea #}
+<section class="card mt-8 overflow-hidden">
+    <div class="flex flex-wrap items-center justify-between gap-4 p-5">
+        <h2 class="text-lg font-bold text-sefel-black">APU asignados</h2>
+        <div class="flex gap-6 text-sm">
+            <span>Total cotizado: <strong>{{ presupuesto.total_cotizado | clp }}</strong></span>
+            <span>Total real: <strong>{{ presupuesto.total_real | clp }}</strong></span>
+            <span>Monto final: <strong>{{ presupuesto.monto_final | clp }}</strong></span>
+        </div>
+    </div>
+    <div class="relative overflow-x-auto">
+        <table class="w-full min-w-[64rem] text-left">
+            <thead class="border-y border-gray-100 bg-gray-50">
+                <tr>
+                    <th class="th">APU</th>
+                    <th class="th">Categoría</th>
+                    <th class="th">Unidad</th>
+                    <th class="th text-right">Cantidad</th>
+                    <th class="th text-right">Costo cotizado</th>
+                    <th class="th text-right">Costo real</th>
+                    <th class="th text-right">Subtotal cotizado</th>
+                    <th class="th text-right">Subtotal real</th>
+                    <th class="th"><span class="sr-only">Guardar</span></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for item, item_apu in items %}
+                <tr id="item-{{ item.id }}" class="hover:bg-gray-50/70">
+                    <td class="td">
+                        <span class="font-semibold text-sefel-black">{{ item_apu.code }}</span>
+                        <span class="block text-sm text-neutral-500">{{ item_apu.name }}</span>
+                    </td>
+                    <td class="td text-neutral-700">{{ item_apu.category or "—" }}</td>
+                    <td class="td text-neutral-500">{{ item.unit }}</td>
+                    <td class="td text-right">
+                        <input form="editar-item-{{ item.id }}" name="cantidad" type="number" min="1" step="1" required
+                               value="{{ item.cantidad }}" class="field w-24 text-right" aria-label="Cantidad">
+                    </td>
+                    <td class="td text-right">
+                        <input form="editar-item-{{ item.id }}" name="estimated_unit_cost" type="number" min="0" step="1" required
+                               value="{{ item.estimated_unit_cost }}" class="field w-32 text-right" aria-label="Costo cotizado unitario">
+                    </td>
+                    <td class="td text-right">
+                        <input form="editar-item-{{ item.id }}" name="real_unit_cost" type="number" min="0" step="1" required
+                               value="{{ item.real_unit_cost }}" class="field w-32 text-right" aria-label="Costo real unitario">
+                    </td>
+                    <td class="td whitespace-nowrap text-right">{{ item.subtotal | clp }}</td>
+                    <td class="td whitespace-nowrap text-right font-bold {{ 'text-red-700' if item.real_subtotal > item.subtotal else 'text-sefel-black' }}">
+                        {{ item.real_subtotal | clp }}
+                    </td>
+                    <td class="td text-right">
+                        <form id="editar-item-{{ item.id }}" method="post"
+                              action="/presupuestos/{{ presupuesto.id_presupuesto }}/items/{{ item.id }}">
+                            <button type="submit" class="btn btn-outline">Guardar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="td py-8 text-center text-neutral-500">
+                        Todavía no hay APU asignados a este presupuesto.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
 {% endblock content %}

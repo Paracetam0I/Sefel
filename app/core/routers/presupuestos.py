@@ -2,17 +2,24 @@ from datetime import datetime, timedelta, timezone
 from math import ceil
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app.core.calculos import recalcularPresupuesto, totalesPorCategoria
 from app.core.db import getSession
-from app.core.dependencies import CurrentUser
+from app.core.pdf_presupuesto import generarPdfPresupuesto, nombreArchivo
+from app.core.dependencies import CurrentUser, requireRoles
+from app.core.permisos import (
+    ROLES_PRESUPUESTOS_LECTURA,
+    UsuarioPresupuestosEdicion,
+)
 from app.core.flash import flash
-from app.models.user import (
+from app.models.presupuesto import (
+    PorcentajesValidacion,
     Presupuesto,
     PresupuestoValidacion,
     StatusPresupuestos,
@@ -20,7 +27,12 @@ from app.models.user import (
 from app.templates import templates
 
 
-router = APIRouter(tags=["presupuestos"])
+# Lectura (y exportar): BUDGETS, BOTH, ADMIN y VIEWER. El resto recibe 403.
+# Los endpoints que modifican piden además un rol de edición (VIEWER -> 403).
+router = APIRouter(
+    tags=["presupuestos"],
+    dependencies=[Depends(requireRoles(*ROLES_PRESUPUESTOS_LECTURA))],
+)
 
 PRESUPUESTOS_POR_PAGINA = 10
 LISTA_URL = "/presupuestos"
@@ -30,11 +42,9 @@ LISTA_URL = "/presupuestos"
 # ==========================================
 
 def _buscar(session: Session, presupuesto_id: int, usuario) -> Presupuesto | None:
-    """Busca un presupuesto asegurando que pertenece al usuario actual."""
-    presupuesto = session.get(Presupuesto, presupuesto_id)
-    if presupuesto is None or presupuesto.id_usuario != usuario.id:
-        return None
-    return presupuesto
+    """Busca un presupuesto. No hay exclusividad por creador: los permisos
+    los decide el rol (ver app/core/permisos.py)."""
+    return session.get(Presupuesto, presupuesto_id)
 
 
 def _resumen(todos: list[Presupuesto]) -> dict:
@@ -184,9 +194,9 @@ def _codigoExistente(
     id_usuario: int,
     excluir_id: int | None = None,
 ) -> bool:
+    # El código es único en todo el sistema (todos ven todos los presupuestos)
     consulta = select(Presupuesto).where(
         func.lower(Presupuesto.code) == code.casefold(),
-        Presupuesto.id_usuario == id_usuario,
     )
     if excluir_id is not None:
         consulta = consulta.where(Presupuesto.id_presupuesto != excluir_id)
@@ -326,13 +336,52 @@ def listar(
     )
 
 
+# Exportar a PDF (todos los roles con acceso a Presupuestos, VIEWER incluido)
+# ==========================================
+
+@router.get("/presupuestos/exportar")
+def mostrarExportar(
+    request: Request,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    """Selector (modal) para elegir qué presupuesto exportar."""
+    presupuestos = session.exec(
+        select(Presupuesto).order_by(Presupuesto.created_at.desc())
+    ).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/presupuesto/exportar.html",
+        context={"usuario": usuario, "presupuestos": presupuestos},
+    )
+
+
+@router.get("/presupuestos/{presupuesto_id}/pdf")
+def exportarPdf(
+    presupuesto_id: int,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    presupuesto = _buscar(session, presupuesto_id, usuario)
+    if presupuesto is None:
+        raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
+
+    return Response(
+        content=generarPdfPresupuesto(session, presupuesto),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{nombreArchivo(presupuesto)}"',
+        },
+    )
+
+
 # Crear presupuesto
 # ==========================================
 
 @router.get("/presupuestos/nuevo")
 def mostrarFormulario(
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
 ):
     return _renderFormulario(
         request,
@@ -346,7 +395,7 @@ def mostrarFormulario(
 @router.post("/presupuestos")
 def crear(
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     code: str = Form(...),
     client_name: str = Form(...),
     estimate_income: str = Form(...),
@@ -412,7 +461,7 @@ def crear(
 def mostrarEdicion(
     presupuesto_id: int,
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     session: Session = Depends(getSession),
 ):
     presupuesto = _buscar(session, presupuesto_id, usuario)
@@ -431,7 +480,7 @@ def mostrarEdicion(
 def actualizar(
     presupuesto_id: int,
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     code: str = Form(...),
     client_name: str = Form(...),
     estimate_income: str = Form(...),
@@ -474,8 +523,7 @@ def actualizar(
         if campo != "id_presupuesto":
             setattr(presupuesto, campo, valor)
 
-    presupuesto.updated_at = datetime.now(timezone.utc)
-    session.add(presupuesto)
+    recalcularPresupuesto(session, presupuesto)
 
     try:
         session.commit()
@@ -509,7 +557,7 @@ def actualizar(
 def cambiarEstado(
     presupuesto_id: int,
     request: Request,
-    usuario: CurrentUser,
+    usuario: UsuarioPresupuestosEdicion,
     nuevo_estado: str = Form(...),
     q: str = Form(""),
     estado: str = Form(""),
@@ -552,4 +600,152 @@ def cambiarEstado(
     destino = f"{LISTA_URL}?{parametros}" if parametros else LISTA_URL
     return RedirectResponse(
         f"{destino}#presupuesto-{presupuesto_id}", status_code=303,
+    )
+
+
+# Porcentajes de gastos y montos calculados
+# ==========================================
+
+NOMBRES_PORCENTAJES = {
+    "pct_gastos_generales": "gastos generales",
+    "pct_iva": "IVA",
+    "pct_utilidad": "utilidad",
+}
+
+
+def _validarPorcentajes(datos: dict) -> tuple[dict | None, str | None]:
+    try:
+        return PorcentajesValidacion.model_validate(datos).model_dump(), None
+    except ValidationError as exc:
+        error = exc.errors()[0]
+        campo = error["loc"][0]
+        if campo in NOMBRES_PORCENTAJES:
+            return None, (
+                f"El porcentaje de {NOMBRES_PORCENTAJES[campo]} "
+                "debe ser un número entre 0 y 100."
+            )
+        if campo == "costo_directo":
+            return None, "El costo directo fijo debe ser un entero mayor o igual a 0."
+        if campo == "costo_neto":
+            return None, "El costo neto fijo debe ser un entero mayor o igual a 0."
+        return None, "Revisa los datos ingresados."
+
+
+def _renderPorcentajes(
+    request: Request,
+    usuario,
+    session: Session,
+    presupuesto: Presupuesto,
+    *,
+    datos: dict | None = None,
+    error: str | None = None,
+    guardado: bool = False,
+    es_htmx: bool = False,
+):
+    if datos is None:
+        datos = {
+            "pct_gastos_generales": presupuesto.pct_gastos_generales,
+            "pct_iva": presupuesto.pct_iva,
+            "pct_utilidad": presupuesto.pct_utilidad,
+            "costo_directo": presupuesto.costo_directo or 0,
+            "costo_neto": presupuesto.costo_neto,
+        }
+
+    return templates.TemplateResponse(
+        request=request,
+        name=(
+            "partials/presupuesto/porcentajes.html"
+            if es_htmx
+            else "presupuesto_porcentajes.html"
+        ),
+        context={
+            "usuario": usuario,
+            "presupuesto": presupuesto,
+            "datos": datos,
+            "categorias": totalesPorCategoria(session, presupuesto),
+            "error": error,
+            "guardado": guardado,
+            # Fuera del modal (página propia) no hay botón "Cerrar"
+            "pagina_completa": (
+                not es_htmx
+                or request.headers.get("HX-Target") == "porcentajes-pagina"
+            ),
+        },
+    )
+
+
+@router.get("/presupuestos/{presupuesto_id}/porcentajes")
+def mostrarPorcentajes(
+    presupuesto_id: int,
+    request: Request,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    presupuesto = _buscar(session, presupuesto_id, usuario)
+    if presupuesto is None:
+        flash(request, "El presupuesto solicitado no existe.", "error")
+        return RedirectResponse(LISTA_URL, status_code=303)
+
+    return _renderPorcentajes(
+        request, usuario, session, presupuesto,
+        es_htmx=request.headers.get("HX-Request") == "true",
+    )
+
+
+@router.post("/presupuestos/{presupuesto_id}/porcentajes")
+def guardarPorcentajes(
+    presupuesto_id: int,
+    request: Request,
+    usuario: UsuarioPresupuestosEdicion,
+    pct_gastos_generales: str = Form("0"),
+    pct_iva: str = Form("0"),
+    pct_utilidad: str = Form("0"),
+    costo_directo: str = Form("0"),
+    costo_neto: str = Form("0"),
+    session: Session = Depends(getSession),
+):
+    es_htmx = request.headers.get("HX-Request") == "true"
+    presupuesto = _buscar(session, presupuesto_id, usuario)
+    if presupuesto is None:
+        flash(request, "El presupuesto solicitado no existe.", "error")
+        return RedirectResponse(LISTA_URL, status_code=303)
+
+    datos = {
+        "pct_gastos_generales": pct_gastos_generales,
+        "pct_iva": pct_iva,
+        "pct_utilidad": pct_utilidad,
+        "costo_directo": costo_directo,
+        "costo_neto": costo_neto,
+    }
+    validados, error = _validarPorcentajes(datos)
+
+    if error:
+        respuesta = _renderPorcentajes(
+            request, usuario, session, presupuesto,
+            datos=datos, error=error, es_htmx=es_htmx,
+        )
+        if not es_htmx:
+            respuesta.status_code = 400
+        return respuesta
+
+    for campo, valor in validados.items():
+        setattr(presupuesto, campo, valor)
+    # 0 en costo directo = usar la suma real de los ítems
+    presupuesto.costo_directo = validados["costo_directo"] or None
+
+    recalcularPresupuesto(session, presupuesto)
+    session.commit()
+    session.refresh(presupuesto)
+
+    if es_htmx:
+        respuesta = _renderPorcentajes(
+            request, usuario, session, presupuesto,
+            guardado=True, es_htmx=True,
+        )
+        respuesta.headers["HX-Trigger"] = "recargar-presupuestos"
+        return respuesta
+
+    flash(request, "Porcentajes guardados y montos recalculados.", "success")
+    return RedirectResponse(
+        f"/presupuestos/{presupuesto_id}/porcentajes", status_code=303,
     )

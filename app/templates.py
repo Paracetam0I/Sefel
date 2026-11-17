@@ -4,6 +4,8 @@ import sys
 from fastapi.templating import Jinja2Templates
 from app.core.flash import getFlashedMessages
 from app.core.formato import etiquetaRol, formatearClp, formatearFecha, iniciales
+from app.core.config import INACTIVIDAD_MAXIMA_SEGUNDOS
+from app.core.permisos import puede
 
 def getBaseDir() -> str:
     # Si PyInstaller congeló la app, los recursos están en sys._MEIPASS
@@ -19,6 +21,8 @@ BASE_DIR = getBaseDir()
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 templates.env.globals["get_flashed_messages"] = getFlashedMessages
+templates.env.globals["puede"] = puede
+templates.env.globals["inactividad_ms"] = INACTIVIDAD_MAXIMA_SEGUNDOS * 1000
 templates.env.filters["clp"] = formatearClp
 templates.env.filters["fecha"] = formatearFecha
 templates.env.filters["rol_label"] = etiquetaRol

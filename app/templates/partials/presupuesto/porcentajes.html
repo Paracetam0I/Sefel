@@ -1,0 +1,171 @@
+{#
+    Porcentajes de gastos, totales por categoría de APU y montos calculados.
+    Se carga en el modal de presupuestos (#modal-presupuesto-body) o en página completa.
+#}
+{% set puede_editar = puede(usuario, "presupuestos_edicion") %}
+
+{% macro pct(valor) -%}
+    {{ valor if valor is string else "%g" | format(valor) }}
+{%- endmacro %}
+
+<div class="space-y-6">
+
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <h2 class="text-xl font-bold text-sefel-black">Porcentajes y totales</h2>
+            <p class="mt-1 text-sm text-neutral-500">
+                {{ presupuesto.code }} · {{ presupuesto.client_name }}
+            </p>
+        </div>
+        {% if not pagina_completa %}
+        <button type="button" class="btn btn-outline"
+                @click="$dispatch('cerrar-modal-presupuesto')">Cerrar</button>
+        {% endif %}
+    </div>
+
+    {% if error %}
+    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{{ error }}</div>
+    {% elif guardado %}
+    <div class="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700" role="status">
+        Porcentajes guardados y montos recalculados.
+    </div>
+    {% endif %}
+
+    {# 1) Totales por categoría de APU #}
+    <section>
+        <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">Totales por categoría</h3>
+        <div class="overflow-x-auto rounded-lg border border-gray-100">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="th">Categoría</th>
+                        <th class="th text-right">Ítems</th>
+                        <th class="th text-right">Cotizado</th>
+                        <th class="th text-right">Real</th>
+                        <th class="th text-right">Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for c in categorias %}
+                    <tr>
+                        <td class="td font-semibold text-sefel-black">{{ c.categoria }}</td>
+                        <td class="td text-right text-neutral-500">{{ c.cantidad_items }}</td>
+                        <td class="td whitespace-nowrap text-right">{{ c.cotizado | clp }}</td>
+                        <td class="td whitespace-nowrap text-right">{{ c.real | clp }}</td>
+                        <td class="td whitespace-nowrap text-right {{ 'text-red-700' if c.real > c.cotizado else 'text-green-700' if c.real < c.cotizado else 'text-neutral-500' }}">
+                            {{ (c.real - c.cotizado) | clp }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="td py-6 text-center text-neutral-500">
+                            Este presupuesto todavía no tiene APU asignados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if categorias %}
+                <tfoot class="border-t border-gray-200 bg-gray-50 font-bold text-sefel-black">
+                    <tr>
+                        <td class="td">Total</td>
+                        <td class="td text-right">{{ categorias | sum(attribute="cantidad_items") }}</td>
+                        <td class="td whitespace-nowrap text-right">{{ presupuesto.total_cotizado | clp }}</td>
+                        <td class="td whitespace-nowrap text-right">{{ presupuesto.total_real | clp }}</td>
+                        <td class="td whitespace-nowrap text-right">{{ (presupuesto.total_real - presupuesto.total_cotizado) | clp }}</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </section>
+
+    {# 2) Formulario de porcentajes y montos fijos #}
+    <form method="post"
+          action="/presupuestos/{{ presupuesto.id_presupuesto }}/porcentajes"
+          hx-post="/presupuestos/{{ presupuesto.id_presupuesto }}/porcentajes"
+          hx-target="{{ '#porcentajes-pagina' if pagina_completa else '#modal-presupuesto-body' }}"
+          hx-swap="innerHTML">
+        <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">Porcentajes de gastos</h3>
+        <fieldset class="grid grid-cols-1 gap-4 sm:grid-cols-3" {% if not puede_editar %}disabled{% endif %}>
+            <div>
+                <label for="pct_gastos_generales" class="label">Gastos generales (%)</label>
+                <input id="pct_gastos_generales" name="pct_gastos_generales" type="number"
+                       min="0" max="100" step="0.01" required
+                       value="{{ pct(datos.pct_gastos_generales) }}" class="field w-full">
+            </div>
+            <div>
+                <label for="pct_iva" class="label">IVA (%)</label>
+                <input id="pct_iva" name="pct_iva" type="number"
+                       min="0" max="100" step="0.01" required
+                       value="{{ pct(datos.pct_iva) }}" class="field w-full">
+            </div>
+            <div>
+                <label for="pct_utilidad" class="label">Utilidad (%)</label>
+                <input id="pct_utilidad" name="pct_utilidad" type="number"
+                       min="0" max="100" step="0.01" required
+                       value="{{ pct(datos.pct_utilidad) }}" class="field w-full">
+            </div>
+            <div class="sm:col-span-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="costo_directo" class="label">Costo directo fijo (CLP)</label>
+                    <input id="costo_directo" name="costo_directo" type="number" min="0" step="1"
+                           value="{{ datos.costo_directo }}" class="field w-full">
+                    <p class="mt-1 text-xs text-neutral-500">0 = usar el total real de los ítems como base.</p>
+                </div>
+                <div>
+                    <label for="costo_neto" class="label">Costo neto fijo (CLP)</label>
+                    <input id="costo_neto" name="costo_neto" type="number" min="0" step="1"
+                           value="{{ datos.costo_neto }}" class="field w-full">
+                    <p class="mt-1 text-xs text-neutral-500">0 = usar el neto calculado (el IVA se aplica sobre el neto).</p>
+                </div>
+            </div>
+        </fieldset>
+
+        {% if puede_editar %}
+        <div class="mt-4 flex justify-end">
+            <button type="submit" class="btn btn-primary">Guardar y recalcular</button>
+        </div>
+        {% else %}
+        <p class="mt-3 text-sm text-neutral-500">Tu rol solo permite consultar estos valores.</p>
+        {% endif %}
+    </form>
+
+    {# 3) Montos calculados (valores guardados en el presupuesto) #}
+    <section>
+        <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">Montos calculados</h3>
+        <dl class="divide-y divide-gray-100 rounded-lg border border-gray-100 text-sm">
+            <div class="flex justify-between px-4 py-2.5">
+                <dt class="text-neutral-600">
+                    Base ({{ "costo directo fijo" if presupuesto.costo_directo else "total real" }})
+                </dt>
+                <dd class="font-semibold">{{ presupuesto.base_calculo | clp }}</dd>
+            </div>
+            <div class="flex justify-between px-4 py-2.5">
+                <dt class="text-neutral-600">+ Gastos generales ({{ pct(presupuesto.pct_gastos_generales) }}%)</dt>
+                <dd>{{ presupuesto.monto_gastos_generales | clp }}</dd>
+            </div>
+            <div class="flex justify-between px-4 py-2.5">
+                <dt class="text-neutral-600">+ Utilidad ({{ pct(presupuesto.pct_utilidad) }}%)</dt>
+                <dd>{{ presupuesto.monto_utilidad | clp }}</dd>
+            </div>
+            <div class="flex justify-between px-4 py-2.5">
+                <dt class="font-semibold text-sefel-black">= Neto calculado</dt>
+                <dd class="font-semibold text-sefel-black">{{ presupuesto.monto_costo_neto | clp }}</dd>
+            </div>
+            {% if presupuesto.costo_neto %}
+            <div class="flex justify-between px-4 py-2.5">
+                <dt class="text-neutral-600">Neto fijo (reemplaza al calculado)</dt>
+                <dd>{{ presupuesto.costo_neto | clp }}</dd>
+            </div>
+            {% endif %}
+            <div class="flex justify-between px-4 py-2.5">
+                <dt class="text-neutral-600">+ IVA ({{ pct(presupuesto.pct_iva) }}% sobre el neto)</dt>
+                <dd>{{ presupuesto.monto_iva | clp }}</dd>
+            </div>
+            <div class="flex justify-between bg-gray-50 px-4 py-3 text-base">
+                <dt class="font-bold text-sefel-black">Total del presupuesto</dt>
+                <dd class="font-extrabold text-sefel-black">{{ presupuesto.monto_total | clp }}</dd>
+            </div>
+        </dl>
+    </section>
+</div>

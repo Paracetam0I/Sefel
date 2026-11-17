@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlmodel import Session, select
 
+from app.core.bloqueo import desactivarCuenta, reactivarCuenta
 from app.core.db import getSession
 from app.core.dependencies import requireRoles
 from app.core.flash import flash
@@ -239,7 +240,11 @@ def actualizar(
     usuario.email = email
     usuario.full_name = full_name
     usuario.role = role
-    usuario.is_active = activo
+    # Activar/desactivar pasa por la auditoría (y la reactivación limpia el bloqueo)
+    if activo and not usuario.is_active:
+        reactivarCuenta(session, usuario, admin)
+    elif not activo and usuario.is_active:
+        desactivarCuenta(session, usuario, admin)
     if password:
         usuario.hashed_password = hashPassword(password)
     session.add(usuario)
@@ -264,8 +269,10 @@ def cambiarEstado(
     elif usuario.id == admin.id:
         flash(request, "No puedes desactivar tu propia cuenta.", "error")
     else:
-        usuario.is_active = not usuario.is_active
-        session.add(usuario)
+        if usuario.is_active:
+            desactivarCuenta(session, usuario, admin)
+        else:
+            reactivarCuenta(session, usuario, admin)
         session.commit()
         flash(
             request,

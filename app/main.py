@@ -3,15 +3,15 @@ import logging
 import os
 import sys
 import time
+from math import ceil
 
 from typing import Annotated
-from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi import Depends, Form
 
 from sqlmodel import Session, select
@@ -20,12 +20,20 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.logging import configuracionLogging
 from app.core.config import SECRET_KEY
-from app.core.handlers import registerAuthHandlers
+from app.core.handlers import MENSAJE_INACTIVIDAD, registerAuthHandlers
 from app.core.dependencies import CurrentUser, getCurrentUser
-from app.core.dependencies import OptionalUser
+from app.core.dependencies import MOTIVO_INACTIVIDAD, OptionalUser, marcarActividad
+from app.core.bloqueo import (
+    BLOQUEO_TEMPORAL,
+    MENSAJE_DESACTIVADA,
+    ResultadoIntento,
+    bloqueoTemporalRestante,
+    registrarIntentoFallido,
+    registrarLoginCorrecto,
+)
 from app.core.security import verifyPassword
 from app.core.db import getSession
-from app.core.routers import admin, apu, items, presupuestos
+from app.core.routers import admin, apu, dashboard, items, presupuestos
 from app.core.dependencies import requireRoles
 
 from app.models.user import User, UserRole
@@ -75,6 +83,7 @@ app.include_router(admin.router)
 app.include_router(presupuestos.router)
 app.include_router(apu.router)
 app.include_router(items.router)
+app.include_router(dashboard.router)
 
 # Test de sesión 
 @app.get("/protegido")
@@ -175,7 +184,7 @@ def saludo():
 
 
 @app.get("/login")
-def mostrarLogin(request: Request, usuario: OptionalUser):
+def mostrarLogin(request: Request, usuario: OptionalUser, motivo: str = ""):
     if usuario is not None:
         # Revisar esto luego, no redirigir al dashboard, si no que a otra ruta por defecto
         return RedirectResponse(url="/dashboard", status_code=303)
@@ -183,9 +192,22 @@ def mostrarLogin(request: Request, usuario: OptionalUser):
     return templates.TemplateResponse(
         request=request,
         name="auth/login.html",
-        context={"error": None},
+        context={
+            "error": None,
+            "aviso": MENSAJE_INACTIVIDAD if motivo == MOTIVO_INACTIVIDAD else None,
+        },
     )
-    
+
+
+def _errorLogin(request: Request, mensaje: str, status_code: int):
+    return templates.TemplateResponse(
+        request=request,
+        name="auth/login.html",
+        context={"error": mensaje},
+        status_code=status_code,
+    )
+
+
 @app.post("/login")
 def procesarLogin(
     request: Request,
@@ -198,47 +220,74 @@ def procesarLogin(
     if user is not None:
         return RedirectResponse("/dashboard", status_code=303)
 
-    
     usuario = session.exec(select(User).where(User.username == username)).first()
 
-    if (
-        usuario is None
-        or not usuario.is_active
-        or not verifyPassword(password, usuario.hashed_password)
-    ):
-        return templates.TemplateResponse(
-            request=request,
-            name="auth/login.html",
-            context={"error": "Usuario o contraseña incorrectos"},
-            status_code=401,
+    if usuario is None:
+        return _errorLogin(request, "Usuario o contraseña incorrectos.", 401)
+
+    # Cuenta desactivada (por intentos fallidos o por un administrador)
+    if not usuario.is_active:
+        mensaje = (
+            MENSAJE_DESACTIVADA if usuario.lock_reason
+            else "Tu cuenta está desactivada. Contacta a un administrador."
+        )
+        return _errorLogin(request, mensaje, 403)
+
+    # Bloqueo temporal (solo le ocurre al único ADMIN activo)
+    restante = bloqueoTemporalRestante(usuario)
+    if restante is not None:
+        minutos = max(1, ceil(restante.total_seconds() / 60))
+        return _errorLogin(
+            request,
+            "Demasiados intentos fallidos. Por seguridad la cuenta queda "
+            f"bloqueada temporalmente; inténtalo de nuevo en {minutos} min.",
+            429,
         )
 
-    if not usuario.is_active:
-        return templates.TemplateResponse(
-            request=request,
-            name="auth/login.html",
-            context={"error": "Tu cuenta está desactivada"},
-            status_code=403,
+    if not verifyPassword(password, usuario.hashed_password):
+        resultado, restantes = registrarIntentoFallido(session, usuario.id)
+        if resultado == ResultadoIntento.DESACTIVADA:
+            return _errorLogin(request, MENSAJE_DESACTIVADA, 403)
+        if resultado == ResultadoIntento.BLOQUEO_TEMPORAL:
+            minutos = int(BLOQUEO_TEMPORAL.total_seconds() // 60)
+            return _errorLogin(
+                request,
+                f"Demasiados intentos fallidos. Por seguridad la cuenta queda "
+                f"bloqueada temporalmente; inténtalo de nuevo en {minutos} min.",
+                429,
             )
-    usuario.last_login = datetime.now(timezone.utc)
+        mensaje = "Usuario o contraseña incorrectos."
+        if restantes <= 2:
+            mensaje += (
+                f" Te queda{'n' if restantes > 1 else ''} {restantes} "
+                f"intento{'s' if restantes > 1 else ''} antes de que la cuenta se desactive."
+            )
+        return _errorLogin(request, mensaje, 401)
+
+    registrarLoginCorrecto(usuario)
     session.add(usuario)
     session.commit()
 
+    request.session.clear()
     request.session["user_id"] = usuario.id # Guardamos el ID del usuario en la sesión (se escribe en una cookie)
+    marcarActividad(request)
 
 # Luego echar un ojo en este redirect, para cambiar por un next_url y poner por defecto la web de los presupuesto u otra distinta que no sea el dashboard
     return RedirectResponse(url="/dashboard", status_code=303) #status_code=303 indica que es una redirección después de un POST, para evitar que el navegador vuelva a enviar el formulario si se recarga la página
 
-@app.get("/dashboard")
-def mostrarDashboard(request: Request, usuario: CurrentUser):
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={"usuario": usuario},
-    )
+
+# Latido de actividad: el front lo llama cuando hay clics/teclas sin peticiones
+# al servidor. CurrentUser renueva la marca de actividad (o responde 401 si venció).
+@app.post("/api/sesion/actividad", status_code=204)
+def registrarActividad(usuario: CurrentUser):
+    return Response(status_code=204)
+
 
 # Formulario para salir de sesión
 @app.post("/logout")
-def cerrarSesion(request: Request):
+def cerrarSesion(request: Request, motivo: str = ""):
     request.session.clear()
-    return RedirectResponse(url="/login", status_code=303)
+    destino = "/login"
+    if motivo == MOTIVO_INACTIVIDAD:
+        destino = f"/login?motivo={MOTIVO_INACTIVIDAD}"
+    return RedirectResponse(url=destino, status_code=303)

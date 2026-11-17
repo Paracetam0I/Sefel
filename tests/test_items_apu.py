@@ -140,9 +140,10 @@ def test_rechaza_apu_inactivo_al_guardar(
     assert session.exec(select(DetallePresupuesto)).first() is None
 
 
-def test_no_agrega_items_a_presupuesto_de_otro_usuario(
+def test_agrega_items_a_presupuesto_creado_por_otro_usuario(
     logged_in_client, session, apu
 ):
+    # No hay exclusividad por creador: los roles de edición trabajan sobre todos
     otro = User(
         username="otro", email="otro@example.com",
         hashed_password=hashPassword("Otra12345"),
@@ -169,8 +170,8 @@ def test_no_agrega_items_a_presupuesto_de_otro_usuario(
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/presupuestos"
-    assert session.exec(select(DetallePresupuesto)).first() is None
+    item = session.exec(select(DetallePresupuesto)).one()
+    assert item.id_presupuesto == ajeno.id_presupuesto
 
 
 def test_viewer_recibe_403_al_agregar_items(

@@ -7,36 +7,24 @@ Uso:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from sqlmodel import Session, SQLModel, select
 
 from app.core.db import engine
 from app.models.user import User, UserRole, Presupuesto, StatusPresupuestos
 from app.models.detalle_presupuesto import DetallePresupuesto
+from app.core.inicializacion import ADMIN_INICIAL, UsuarioInicial
 from app.core.security import hashPassword
 
 
 # -----------------------------
 # Datos a sembrar
 # -----------------------------
-@dataclass(frozen=True)
-class UserSeed:
-    username: str
-    email: str
-    password: str
-    full_name: str
-    role: UserRole
+# Misma estructura que usa la app al arrancar (app/core/inicializacion.py)
+UserSeed = UsuarioInicial
 
 # Constante para los usuarios en la base de datos, pueden cambiarse desde aquí para realizar pruebas
 SEED_USERS: list[UserSeed] = [
-    UserSeed(
-        username="admin",
-        email="admin@example.com",
-        password="admin123",
-        full_name="Administrador",
-        role=UserRole.ADMIN,
-    ),
+    ADMIN_INICIAL,   # el administrador inicial se define en app/core/inicializacion.py
     UserSeed(
         username="materiales",
         email="materiales@example.com",

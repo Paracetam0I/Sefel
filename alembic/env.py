@@ -9,15 +9,18 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: al migrar desde la app (client.py) no se
+    # deben apagar los loggers que ya existan
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 from sqlmodel import SQLModel
 
 from app.core.db import engine
-from app.models.test_model import TestModel
-from app.models.user import User, Presupuesto
+from app.models.user import User
+from app.models.presupuesto import Presupuesto
 from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto  # noqa: F401
+from app.models.auditoria import AuditoriaCuenta  # noqa: F401
 
 target_metadata = SQLModel.metadata
 
@@ -45,6 +48,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,  # SQLite no soporta ALTER TABLE completo
     )
 
     with context.begin_transaction():
@@ -55,13 +59,27 @@ def run_migrations_online() -> None:
     connectable = engine
 
     with connectable.connect() as connection:
+        # El modo batch recrea tablas (copiar, borrar, renombrar). Con las FK
+        # activas (app.core.db las enciende) borrar una tabla referenciada,
+        # p. ej. apu desde detalle_presupuesto, falla. Se apagan solo durante
+        # la migración; el PRAGMA debe ir fuera de una transacción.
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            render_as_batch=True,  # SQLite no soporta ALTER TABLE completo
         )
 
         with context.begin_transaction():
             context.run_migrations()
+
+        # Verifica que la migración no haya dejado referencias rotas
+        rotas = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        if rotas:
+            raise RuntimeError(f"La migración dejó claves foráneas rotas: {rotas}")
 
 
 if context.is_offline_mode():

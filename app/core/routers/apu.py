@@ -10,13 +10,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from pydantic import ValidationError
 from app.core.db import getSession
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import CurrentUser, requireRoles
 from app.core.flash import flash
+from app.core.permisos import ROLES_APU
 from app.models.apu import APU, APUValidacion
 from app.templates import templates
 
 
-router = APIRouter(tags=["apu"])
+# Solo MATERIALS, BOTH y ADMIN: el resto recibe 403 (igual que admin/users)
+router = APIRouter(
+    tags=["apu"],
+    dependencies=[Depends(requireRoles(*ROLES_APU))],
+)
 
 APUS_POR_PAGINA = 10
 LISTA_URL = "/apu"
@@ -88,6 +93,7 @@ def _datosFormulario(
     category: str = "",
     unit_cost: str | int = "",
     description: str = "",
+    real_unit_cost: str | int = "",
 ) -> dict:
     return {
         "code": code,
@@ -96,6 +102,7 @@ def _datosFormulario(
         "category": category,
         "unit_cost": unit_cost,
         "description": description,
+        "real_unit_cost": real_unit_cost,
     }
 
 
@@ -108,7 +115,12 @@ def _validar(datos: dict) -> tuple[dict, str | None]:
         str(datos.get("category", "")),
         datos.get("unit_cost", ""),
         str(datos.get("description", "")),
+        datos.get("real_unit_cost", ""),
     )
+
+    # Si no se indica costo real, parte igual al cotizado
+    if str(datos_limpios["real_unit_cost"]).strip() == "":
+        datos_limpios["real_unit_cost"] = datos_limpios["unit_cost"]
 
     try:
         apu_validado = APUValidacion.model_validate(datos_limpios)
@@ -131,6 +143,12 @@ def _validar(datos: dict) -> tuple[dict, str | None]:
                 mensaje = "El precio unitario debe ser un número entero."
             else:
                 mensaje = "El precio unitario no puede ser negativo."
+
+        elif campo == "real_unit_cost":
+            if tipo == "int_parsing":
+                mensaje = "El costo real debe ser un número entero."
+            else:
+                mensaje = "El costo real no puede ser negativo."
 
         elif campo in nombres:
             nombre, longitud = nombres[campo]
@@ -312,13 +330,15 @@ def crear(
     category: str = Form(""),
     unit_cost: str = Form(...),
     description: str = Form(""),
+    real_unit_cost: str = Form(""),
     session: Session = Depends(getSession),
 ):
     es_htmx = request.headers.get("HX-Request") == "true"
 
     datos, error = _validar(
         _datosFormulario(
-            code, name, unit, category, unit_cost, description
+            code, name, unit, category, unit_cost, description,
+            real_unit_cost,
         )
     )
 
@@ -408,6 +428,7 @@ def actualizar(
     category: str = Form(""),
     unit_cost: str = Form(...),
     description: str = Form(""),
+    real_unit_cost: str = Form(""),
     session: Session = Depends(getSession),
 ):
     es_htmx = request.headers.get("HX-Request") == "true"
@@ -420,7 +441,8 @@ def actualizar(
 
     datos, error = _validar(
         _datosFormulario(
-            code, name, unit, category, unit_cost, description
+            code, name, unit, category, unit_cost, description,
+            real_unit_cost,
         )
     )
 
@@ -508,7 +530,7 @@ def cambiarEstado(
         estado_actual = "activo" if apu.is_active else "inactivo"
         flash(
             request,
-            f"El APU '{apu.code}' ahora est? {estado_actual}.",
+            f"El APU '{apu.code}' ahora está {estado_actual}.",
             "success",
         )
 

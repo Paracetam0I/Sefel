@@ -9,14 +9,15 @@
 </section>
 
 <div class="overflow-x-auto">
-    <table class="w-full min-w-[52rem] text-left">
+    <table class="w-full min-w-[60rem] text-left">
         <thead class="border-y border-gray-100 bg-gray-50">
             <tr>
                 <th class="th">Código</th>
                 <th class="th">Nombre</th>
                 <th class="th">Categoría</th>
                 <th class="th">Unidad</th>
-                <th class="th text-right">Precio unitario</th>
+                <th class="th text-right">Costo cotizado</th>
+                <th class="th text-right">Costo real</th>
                 <th class="th">Actualizado</th>
                 <th class="th">Estado</th>
                 <th class="th text-right">Editar</th>
@@ -42,8 +43,13 @@
                     {{ apu.unit }}
                 </td>
 
-                <td class="td text-right font-bold text-sefel-black">
+                <td class="td whitespace-nowrap text-right font-bold text-sefel-black">
                     {{ apu.unit_cost | clp }}
+                </td>
+
+                <td class="td whitespace-nowrap text-right {{ 'text-red-700' if apu.real_unit_cost > apu.unit_cost else 'text-neutral-700' }}"
+                    {% if apu.real_unit_cost > apu.unit_cost %}title="El costo real supera al cotizado"{% endif %}>
+                    {{ apu.real_unit_cost | clp }}
                 </td>
 
                 <td class="td text-neutral-500">
@@ -89,7 +95,7 @@
 
             {% else %}
             <tr>
-                <td colspan="8" class="td py-10 text-center text-neutral-500">
+                <td colspan="9" class="td py-10 text-center text-neutral-500">
                     {% if q or categoria or estado %}
                         No se encontraron APU con los filtros seleccionados.
                     {% else %}

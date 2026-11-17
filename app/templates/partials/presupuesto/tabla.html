@@ -1,10 +1,12 @@
 {% from "partials/ui.html" import icono, paginacion %}
+{# VIEWER: solo lectura y exportar (el backend responde 403 igual) #}
+{% set puede_editar = puede(usuario, "presupuestos_edicion") %}
 
 {# Etiquetas legibles para los valores del enum StatusPresupuestos #}
 {% set etiquetas = {"DRAFT": "Borrador", "ACTIVE": "Activo", "CLOSE": "Cerrado"} %}
 
 {# Filtros — cada control dispara una petición HTMX a /presupuesto #}
-<form class="flex flex-wrap items-center gap-3 p-5" role="search">
+<form id="filtros-presupuesto" class="flex flex-wrap items-center gap-3 p-5" role="search">
     <div class="relative min-w-64 flex-1">
         <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-neutral-400">
             {{ icono("buscar") }}
@@ -32,8 +34,8 @@
     </select>
 </form>
 
-<div class="overflow-x-auto">
-    <table class="w-full min-w-[56rem] text-left">
+<div class="relative overflow-x-auto">
+    <table class="w-full min-w-[72rem] text-left">
         <thead class="border-y border-gray-100 bg-gray-50">
             <tr>
                 <th class="th">Código</th>
@@ -43,6 +45,9 @@
                 <th class="th">Estado</th>
                 <th class="th">Período</th>
                 <th class="th text-right">Total estimado</th>
+                <th class="th text-right">Total cotizado</th>
+                <th class="th text-right">Total real</th>
+                <th class="th text-right">Monto final</th>
                 <th class="th"><span class="sr-only">Acciones</span></th>
             </tr>
         </thead>
@@ -59,6 +64,9 @@
 
                 {# Badge interactivo: dropdown Alpine para cambiar de estado #}
                 <td class="td whitespace-nowrap">
+                    {% if not puede_editar %}
+                    <span class="badge badge-{{ p.status.value | lower }}">{{ etiquetas.get(p.status.value, p.status.value) }}</span>
+                    {% else %}
                     <div x-data="{ abierto: false }" class="relative inline-block">
                         <button type="button"
                                 @click="abierto = !abierto"
@@ -85,6 +93,7 @@
                             {% endfor %}
                         </div>
                     </div>
+                    {% endif %}
                 </td>
 
                 {# Período: reemplaza a "Avance" del diseño original (no hay campo de avance) #}
@@ -100,12 +109,23 @@
                     {% endif %}
                 </td>
 
-                <td class="td whitespace-nowrap text-right font-bold text-sefel-black">
+                <td class="td whitespace-nowrap text-right text-neutral-700">
                     {{ p.estimate_income | clp }}
+                </td>
+                <td class="td whitespace-nowrap text-right text-neutral-700">
+                    {{ p.total_cotizado | clp }}
+                </td>
+                <td class="td whitespace-nowrap text-right {{ 'text-red-700' if p.total_real > p.total_cotizado else 'text-neutral-700' }}">
+                    {{ p.total_real | clp }}
+                </td>
+                <td class="td whitespace-nowrap text-right font-bold text-sefel-black"
+                    title="Total con IVA">
+                    {{ p.monto_final | clp }}
                 </td>
 
                 <td class="td">
-                    <div class="flex items-center justify-end gap-3 text-neutral-500">
+                    <div x-data class="flex items-center justify-end gap-3 text-neutral-500">
+                        {% if puede_editar %}
                         <a href="/presupuestos/{{ p.id_presupuesto }}/editar"
                            class="hover:text-sefel-black" aria-label="Editar {{ p.code }}"
                            hx-get="/presupuestos/{{ p.id_presupuesto }}/editar"
@@ -113,12 +133,30 @@
                            @click="$dispatch('abrir-modal-presupuesto')">
                             {{ icono("editar", "size-[18px]") }}
                         </a>
+                        {% endif %}
+                        <a href="/presupuestos/{{ p.id_presupuesto }}/porcentajes"
+                           class="hover:text-sefel-black"
+                           aria-label="Porcentajes y totales de {{ p.code }}"
+                           title="Porcentajes y totales"
+                           hx-get="/presupuestos/{{ p.id_presupuesto }}/porcentajes"
+                           hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
+                           @click="$dispatch('abrir-modal-presupuesto')">
+                            {{ icono("porcentaje", "size-[18px]") }}
+                        </a>
+                        {% if puede_editar %}
+                        <a href="/presupuestos/{{ p.id_presupuesto }}/items/nuevo"
+                           class="hover:text-sefel-black"
+                           aria-label="Ítems de {{ p.code }}"
+                           title="Ítems (APU asignados)">
+                            {{ icono("mas", "size-[18px]") }}
+                        </a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="td py-10 text-center text-neutral-500">
+                <td colspan="11" class="td py-10 text-center text-neutral-500">
                     No hay presupuestos que coincidan con la búsqueda.
                 </td>
             </tr>

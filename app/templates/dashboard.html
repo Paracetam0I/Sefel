@@ -1,17 +1,137 @@
 {% extends "base.html" %}
+{% from "partials/ui.html" import stat_card %}
 
 {% block title %}Dashboard{% endblock title %}
 
 {% block content %}
+{% set etiquetas = {"DRAFT": "Borrador", "ACTIVE": "Activo", "CLOSE": "Cerrado"} %}
+{% set acciones = {
+    "BLOQUEO": "Bloqueo por intentos",
+    "BLOQUEO_TEMPORAL": "Bloqueo temporal",
+    "REACTIVACION": "Reactivación",
+    "DESACTIVACION": "Desactivación",
+} %}
+
 <h1 class="text-2xl font-bold text-sefel-black">Hola, {{ usuario.full_name }}</h1>
 <p class="mt-1 text-neutral-500">Resumen general de la operación.</p>
 
-<div class="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-    {% for titulo in ["Proyectos", "APU", "Usuarios", "Presupuestos"] %}
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-sm font-medium text-neutral-500">{{ titulo }}</p>
-        <p class="mt-2 text-3xl font-bold text-sefel-black">—</p>
-    </div>
-    {% endfor %}
+{# Tarjetas: solo de los módulos a los que el rol tiene acceso #}
+<section class="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumen">
+    {% if presupuestos %}
+        {{ stat_card("Presupuestos", presupuestos.total,
+                     presupuestos.borradores ~ " en borrador · " ~ presupuestos.cerrados ~ " cerrados") }}
+        {{ stat_card("Presupuestos activos", presupuestos.activos,
+                     "Total con IVA: " ~ (presupuestos.monto_activos | clp)) }}
+    {% endif %}
+    {% if apus %}
+        {{ stat_card("APU", apus.total, apus.activos ~ " activos en el catálogo") }}
+        {{ stat_card("APU actualizados", apus.actualizados, "En los últimos 30 días") }}
+    {% endif %}
+    {% if usuarios %}
+        {{ stat_card("Usuarios", usuarios.total,
+                     usuarios.activos ~ " activos · " ~ usuarios.inactivos ~ " inactivos") }}
+        {{ stat_card("Cuentas bloqueadas", usuarios.bloqueados, "Por intentos fallidos de acceso") }}
+    {% endif %}
+</section>
+
+{% if not (presupuestos or apus or usuarios) %}
+<p class="card mt-8 p-6 text-neutral-500">Tu rol no tiene módulos con métricas para mostrar.</p>
+{% endif %}
+
+<div class="mt-8 grid gap-6 xl:grid-cols-2">
+    {% if presupuestos %}
+    <section class="card overflow-hidden">
+        <div class="flex items-center justify-between p-5">
+            <h2 class="text-lg font-bold text-sefel-black">Últimos presupuestos</h2>
+            <a href="/presupuestos" class="text-sm font-semibold text-sefel-red hover:underline">Ver todos</a>
+        </div>
+        <table class="w-full text-left text-sm">
+            <thead class="border-y border-gray-100 bg-gray-50">
+                <tr>
+                    <th class="th">Código</th>
+                    <th class="th">Cliente</th>
+                    <th class="th">Estado</th>
+                    <th class="th text-right">Total</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for p in presupuestos.ultimos %}
+                <tr>
+                    <td class="td whitespace-nowrap text-neutral-500">{{ p.code }}</td>
+                    <td class="td font-semibold text-sefel-black">{{ p.client_name }}</td>
+                    <td class="td"><span class="badge badge-{{ p.status.value | lower }}">{{ etiquetas.get(p.status.value, p.status.value) }}</span></td>
+                    <td class="td whitespace-nowrap text-right font-bold">{{ p.monto_total | clp }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="td py-6 text-center text-neutral-500">Aún no hay presupuestos.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if apus %}
+    <section class="card overflow-hidden">
+        <div class="flex items-center justify-between p-5">
+            <h2 class="text-lg font-bold text-sefel-black">APU modificados recientemente</h2>
+            <a href="/apu" class="text-sm font-semibold text-sefel-red hover:underline">Ver catálogo</a>
+        </div>
+        <table class="w-full text-left text-sm">
+            <thead class="border-y border-gray-100 bg-gray-50">
+                <tr>
+                    <th class="th">Código</th>
+                    <th class="th">Nombre</th>
+                    <th class="th text-right">Cotizado</th>
+                    <th class="th text-right">Real</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for a in apus.recientes %}
+                <tr class="{{ '' if a.is_active else 'opacity-55' }}">
+                    <td class="td whitespace-nowrap text-neutral-500">{{ a.code }}</td>
+                    <td class="td font-semibold text-sefel-black">{{ a.name }}</td>
+                    <td class="td whitespace-nowrap text-right">{{ a.unit_cost | clp }}</td>
+                    <td class="td whitespace-nowrap text-right">{{ a.real_unit_cost | clp }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="td py-6 text-center text-neutral-500">Aún no hay APU.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if usuarios %}
+    <section class="card overflow-hidden xl:col-span-2">
+        <div class="flex items-center justify-between p-5">
+            <h2 class="text-lg font-bold text-sefel-black">Actividad de seguridad</h2>
+            <a href="/admin/users" class="text-sm font-semibold text-sefel-red hover:underline">Ir a usuarios</a>
+        </div>
+        <table class="w-full text-left text-sm">
+            <thead class="border-y border-gray-100 bg-gray-50">
+                <tr>
+                    <th class="th">Fecha</th>
+                    <th class="th">Cuenta</th>
+                    <th class="th">Acción</th>
+                    <th class="th">Por</th>
+                    <th class="th">Motivo</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for fila in usuarios.auditoria %}
+                <tr>
+                    <td class="td whitespace-nowrap text-neutral-500">{{ fila.evento.created_at | fecha }}</td>
+                    <td class="td font-semibold text-sefel-black">{{ fila.usuario }}</td>
+                    <td class="td">{{ acciones.get(fila.evento.accion.value, fila.evento.accion.value) }}</td>
+                    <td class="td text-neutral-600">{{ fila.actor }}</td>
+                    <td class="td text-neutral-600">{{ fila.evento.motivo }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="td py-6 text-center text-neutral-500">Sin bloqueos ni reactivaciones registrados.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
 </div>
 {% endblock content %}
