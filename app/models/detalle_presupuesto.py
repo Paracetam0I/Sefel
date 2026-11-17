@@ -5,6 +5,12 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import CheckConstraint, Index
 from sqlmodel import Field, Relationship, SQLModel
 
+from decimal import Decimal
+
+from sqlalchemy import Column
+
+from app.core.money import DecimalText
+
 if TYPE_CHECKING:
     from app.models.apu import APU
     from app.models.user import Presupuesto
@@ -14,16 +20,16 @@ class DetallePresupuesto(SQLModel, table=True):
     __tablename__ = "detalle_presupuesto"
 
     __table_args__ = (
-        CheckConstraint("cantidad > 0", name="ck_detalle_cantidad_positiva"),
+        CheckConstraint("CAST(cantidad AS NUMERIC) > 0", name="ck_detalle_cantidad_positiva"),
         CheckConstraint(
-            "estimated_unit_cost >= 0", name="ck_detalle_costo_estimado_no_negativo"
+            "CAST(estimated_unit_cost AS NUMERIC) >= 0", name="ck_detalle_costo_estimado_no_negativo"
         ),
-        CheckConstraint("subtotal >= 0", name="ck_detalle_subtotal_no_negativo"),
+        CheckConstraint("CAST(subtotal AS NUMERIC) >= 0", name="ck_detalle_subtotal_no_negativo"),
         CheckConstraint(
-            "costo_directo >= 0", name="ck_detalle_costo_directo_no_negativo"
+            "CAST(costo_directo AS NUMERIC) >= 0", name="ck_detalle_costo_directo_no_negativo"
         ),
         CheckConstraint(
-            "costo_indirecto >= 0", name="ck_detalle_costo_indirecto_no_negativo"
+            "CAST(costo_indirecto AS NUMERIC) >= 0", name="ck_detalle_costo_indirecto_no_negativo"
         ),
         Index("ix_detalle_id_presupuesto", "id_presupuesto"),
         Index("ix_detalle_id_apu", "id_apu"),
@@ -45,13 +51,24 @@ class DetallePresupuesto(SQLModel, table=True):
     )
     # --- Datos de la línea ---
     unit: str = Field(max_length=30, nullable=False)
-    cantidad: int = Field(default=1, nullable=False, ge=1)
-    estimated_unit_cost: int = Field(nullable=False, ge=0)  # snapshot de APU.unit_cost
-    cantidad: int = Field(default=1, nullable=False, ge=1)
-    subtotal: int = Field(nullable=False, ge=0)         # cantidad * estimated_unit_cost
-
-    costo_directo: int = Field(default=0, nullable=False, ge=0)
-    costo_indirecto: int = Field(default=0, nullable=False, ge=0)
+    cantidad: Decimal = Field(
+        default=Decimal("1"),
+        sa_column=Column(DecimalText(), nullable=False),
+    )
+    estimated_unit_cost: Decimal = Field(
+        sa_column=Column(DecimalText(), nullable=False),
+    )
+    subtotal: Decimal = Field(
+        sa_column=Column(DecimalText(), nullable=False),  # cantidad * estimated_unit_cost, redondeado
+    )
+    costo_directo: Decimal = Field(
+        default=Decimal("0"),
+        sa_column=Column(DecimalText(), nullable=False),
+    )
+    costo_indirecto: Decimal = Field(
+        default=Decimal("0"),
+        sa_column=Column(DecimalText(), nullable=False),
+    )
 
     descripcion: str | None = Field(default=None, max_length=500)
 
