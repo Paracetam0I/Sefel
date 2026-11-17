@@ -6,6 +6,11 @@ hidden = (
     + collect_submodules("fastapi")
     + collect_submodules("starlette")
     + collect_submodules("jinja2")
+    # Migraciones: Alembic carga env.py y las versiones como archivos sueltos,
+    # así que PyInstaller no ve sus imports; se agregan a mano.
+    + collect_submodules("alembic")
+    + collect_submodules("app")
+    + collect_submodules("reportlab")
     + [
         "uvicorn.logging",
         "uvicorn.loops.auto",
@@ -14,6 +19,8 @@ hidden = (
         "uvicorn.lifespan.on",
         "app.main",  
         "passlib.handlers.bcrypt",
+        "logging.config",
+        "sqlmodel.sql.sqltypes",
     ]
 )
 
@@ -24,6 +31,9 @@ a = Analysis(
     datas=[
         ("app/static",    "static"),      
         ("app/templates", "templates"),   
+        # La app crea/migra la BD al abrir (app/core/inicializacion.py)
+        ("alembic",       "alembic"),
+        ("alembic.ini",   "."),
     ],
     hiddenimports=hidden,
     hookspath=[],

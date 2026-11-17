@@ -79,15 +79,19 @@ Puerto: 54123  ->  http://127.0.0.1:54123
 ============================================================
 ```
 
-Otras formas de arrancar (sin las verificaciones):
+Otras formas de arrancar:
 ```powershell
-python client.py            # ventana de escritorio, puerto libre
+python client.py            # ventana de escritorio, puerto libre (también prepara BD y admin)
 python client.py 8765       # ventana de escritorio, puerto fijo
-uvicorn app.main:app --reload --port 8765   # desarrollo con recarga automática
+uvicorn app.main:app --reload --port 8765   # desarrollo con recarga automática (sin verificaciones)
 ```
+
+> La preparación de la base de datos y del administrador vive en `app/core/inicializacion.py`, así que también la hacen `client.py` y el ejecutable. La diferencia: `scripts.iniciar` crea **los 4 usuarios de prueba**, mientras que `client.py`/el ejecutable crean **solo `admin`** (una instalación real no necesita cuentas de prueba).
 
 ## 4. Usuarios de prueba
 Los crea `scripts/seed_admin.py` (automáticamente desde `scripts.iniciar` si no hay ningún ADMIN, o a mano con `python -m scripts.seed_admin`).
+
+Al abrir el ejecutable (o `python client.py`) sin ningún ADMIN activo se crea solo `admin`.
 
 | Usuario | Contraseña | Rol |
 |---|---|---|
@@ -202,7 +206,7 @@ python -m scripts.generate -d -y     # sin preguntar
 Usan SQLite en memoria (o archivos temporales): **no tocan** la base de datos real.
 
 ```powershell
-python -m pytest -v                                   # todas (99)
+python -m pytest -v                                   # todas (103)
 python -m pytest tests/test_auth.py -v                # login y roles
 python -m pytest tests/test_permisos_seguridad.py -v  # permisos, bloqueo e inactividad
 python -m pytest tests/test_costos_presupuesto.py -v  # costos, porcentajes y totales
@@ -218,6 +222,8 @@ Usa **siempre** el spec versionado:
 pyinstaller build.spec
 ```
 El ejecutable queda en `dist/`. Antes de empaquetar, compila el CSS de Tailwind.
+
+Al abrirse, el ejecutable **prepara la base de datos** en la carpeta de datos del usuario: si no existe la crea con todas las tablas, y si viene de una versión anterior aplica las migraciones pendientes (por eso `build.spec` incluye `alembic/` y `alembic.ini`). Si no hay ningún ADMIN activo crea `admin` / `admin123`. Si algo falla, muestra el error en una ventana.
 
 > ⚠️ No ejecutes `pyinstaller client.py` directamente: genera un `.spec` automático que no debe subirse. El único válido es `build.spec`.
 
@@ -246,6 +252,7 @@ app/
 │   ├── dependencies.py     # Usuario actual, control de inactividad, requireRoles
 │   ├── permisos.py         # Roles por módulo
 │   ├── bloqueo.py          # Intentos fallidos y auditoría de cuentas
+│   ├── inicializacion.py   # Crear/migrar la BD y asegurar un ADMIN al arrancar
 │   ├── calculos.py         # Subtotales, porcentajes y totales
 │   ├── pdf_presupuesto.py  # Cotización en PDF (ReportLab)
 │   └── routers/            # admin, apu, items, presupuestos, dashboard

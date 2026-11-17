@@ -4,6 +4,8 @@ from sqlalchemy import inspect
 from sqlmodel import Session, SQLModel, create_engine, select
 
 import app.core.db as db
+import client
+from app.core import inicializacion
 from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto
 from app.models.presupuesto import Presupuesto
@@ -59,8 +61,8 @@ def bd_temporal(tmp_path, monkeypatch):
     ruta = tmp_path / "sefel.db"
     motor = create_engine(f"sqlite:///{ruta}")
     monkeypatch.setattr(db, "engine", motor)
-    monkeypatch.setattr(iniciar, "engine", motor)
-    monkeypatch.setattr(iniciar, "DATABASE_PATH", ruta)
+    monkeypatch.setattr(inicializacion, "engine", motor)
+    monkeypatch.setattr(inicializacion, "DATABASE_PATH", ruta)
     yield motor
     motor.dispose()
 
@@ -91,7 +93,7 @@ def test_crea_usuarios_de_seed_si_no_hay_admin(bd_temporal):
         s.commit()
 
     resultado = iniciar.asegurarAdmin()
-    assert "creados los usuarios de seed" in resultado
+    assert "creados los usuarios iniciales" in resultado
 
     with Session(bd_temporal) as s:
         nombres = set(s.exec(select(User.username)).all())
@@ -118,3 +120,49 @@ def test_avisa_si_el_admin_del_seed_esta_desactivado(bd_temporal):
         s.commit()
 
     assert iniciar.asegurarAdmin().startswith("ATENCIÓN")
+
+
+# Arranque del ejecutable (client.py)
+# ==========================================
+
+def test_inicializar_crea_bd_y_solo_el_admin_inicial(bd_temporal):
+    lineas = inicializacion.inicializar()
+    assert any("tablas creadas" in l for l in lineas)
+    assert "creados los usuarios iniciales (admin)" in lineas[-1]
+
+    with Session(bd_temporal) as s:
+        usuarios = s.exec(select(User)).all()
+    assert [(u.username, u.role) for u in usuarios] == [("admin", UserRole.ADMIN)]
+
+    # Segunda apertura: nada que hacer
+    lineas = inicializacion.inicializar()
+    assert lineas[1].startswith("  -> al día")
+    assert "OK, existe el administrador 'admin'" in lineas[-1]
+
+
+def test_migra_una_bd_con_revision_anterior(bd_temporal):
+    from alembic import command
+
+    inicializacion.prepararBaseDatos()
+    command.downgrade(inicializacion._configAlembic(), "-1")   # simula una versión vieja
+
+    assert inicializacion.prepararBaseDatos().startswith("migrada de")
+    assert inicializacion.verificarTablas() == []
+
+
+def test_sin_migraciones_disponibles_igual_crea_las_tablas(bd_temporal, monkeypatch, tmp_path):
+    monkeypatch.setattr(inicializacion, "ALEMBIC_INI", tmp_path / "no-existe.ini")
+    assert "sin Alembic disponible" in inicializacion.prepararBaseDatos()
+    assert inicializacion.verificarTablas() == []
+
+
+def test_client_muestra_el_error_si_no_puede_preparar_la_bd(monkeypatch):
+    def fallar():
+        raise RuntimeError("disco lleno")
+
+    mostrado = []
+    monkeypatch.setattr(inicializacion, "inicializar", fallar)
+    monkeypatch.setattr(client, "mostrarError", mostrado.append)
+
+    assert client.prepararDatos() is False
+    assert mostrado == ["RuntimeError: disco lleno"]
