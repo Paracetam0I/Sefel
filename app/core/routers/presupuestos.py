@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from math import ceil
 from urllib.parse import urlencode
+import logging
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
@@ -21,6 +22,7 @@ from app.templates import templates
 
 
 router = APIRouter(tags=["presupuestos"])
+logger = logging.getLogger(__name__)
 
 PRESUPUESTOS_POR_PAGINA = 10
 LISTA_URL = "/presupuestos"
@@ -390,8 +392,9 @@ def crear(
 
     try:
         session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         session.rollback()
+        logger.warning("No se pudo guardar el presupuesto: %s", exc.orig)
         return _renderFormulario(
             request, usuario, datos, "crear",
             "No se pudo guardar. Comprueba que el código no esté repetido.",
@@ -487,8 +490,9 @@ def actualizar(
 
     try:
         session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         session.rollback()
+        logger.warning("No se pudieron guardar los cambios del presupuesto: %s", exc.orig)
         return _renderFormulario(
             request, usuario, datos, "editar",
             "No se pudieron guardar los cambios. Comprueba el código.",

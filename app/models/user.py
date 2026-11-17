@@ -104,8 +104,8 @@ class Presupuesto(SQLModel, table=True):
 
     estimate_income: int = Field(nullable=False)
 
-    start_date: NaiveDatetime = Field(default=None)
-    end_date: NaiveDatetime = Field(default=None)
+    start_date: NaiveDatetime | None = Field(default=None)
+    end_date: NaiveDatetime | None = Field(default=None)
 
     description: str = Field(max_length=500, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
