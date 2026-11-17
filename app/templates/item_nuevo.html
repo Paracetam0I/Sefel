@@ -46,18 +46,18 @@
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
             <div>
                 <label for="cantidad" class="label">Cantidad</label>
-                <input id="cantidad" name="cantidad" type="number" min="1" step="1" required
-                       value="{{ datos.cantidad if datos else 1 }}" class="field w-full">
+                <input id="cantidad" name="cantidad" type="number" min="0.01" step="0.01" required
+                    value="{{ datos.cantidad if datos else 1 }}" class="field w-full">
             </div>
             <div>
                 <label for="costo_directo" class="label">Costo directo (CLP)</label>
-                <input id="costo_directo" name="costo_directo" type="number" min="0" step="1" required
-                       value="{{ datos.costo_directo if datos else 0 }}" class="field w-full">
+                <input id="costo_directo" name="costo_directo" type="number" min="0" step="0.01" required
+                    value="{{ datos.costo_directo if datos else 0 }}" class="field w-full">
             </div>
             <div>
                 <label for="costo_indirecto" class="label">Costo indirecto (CLP)</label>
-                <input id="costo_indirecto" name="costo_indirecto" type="number" min="0" step="1" required
-                       value="{{ datos.costo_indirecto if datos else 0 }}" class="field w-full">
+                <input id="costo_indirecto" name="costo_indirecto" type="number" min="0" step="0.01" required
+                    value="{{ datos.costo_indirecto if datos else 0 }}" class="field w-full">
             </div>
         </div>
 

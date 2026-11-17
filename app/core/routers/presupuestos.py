@@ -230,7 +230,7 @@ def _renderFormulario(
     elif not isinstance(presupuesto, dict):
         presupuesto = _a_dict(presupuesto)
 
-    return templates.TemplateResponse(
+    respuesta = templates.TemplateResponse(
         request=request,
         name=(
             "partials/presupuesto/formulario.html"
@@ -246,6 +246,14 @@ def _renderFormulario(
             "estados": list(StatusPresupuestos),
         },
     )
+
+    # Con un error, el formulario debe volver a dibujarse DENTRO del modal,
+    # no en la tabla (que es el destino que declara el formulario para el éxito).
+    if es_htmx and error:
+        respuesta.headers["HX-Retarget"] = "#modal-presupuesto-body"
+        respuesta.headers["HX-Reswap"] = "innerHTML"
+
+    return respuesta
 
 
 def _renderLista(

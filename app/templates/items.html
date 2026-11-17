@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "partials/ui.html" import icono, encabezado %}
+
+{% block title %}Ítems del presupuesto{% endblock title %}
+
+{% block content %}
+{% call encabezado("Ítems del presupuesto", presupuesto.code ~ " · " ~ presupuesto.client_name) %}
+    <a href="/presupuestos" class="btn btn-outline">Volver</a>
+    <a href="/presupuestos/{{ presupuesto.id_presupuesto }}/items/nuevo" class="btn btn-primary">
+        {{ icono("mas") }} Agregar ítem
+    </a>
+{% endcall %}
+
+<section id="items-presupuesto" class="card mt-8 overflow-hidden">
+    {% include "partials/item/tabla.html" %}
+</section>
+{% endblock content %}

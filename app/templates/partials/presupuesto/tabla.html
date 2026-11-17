@@ -106,11 +106,16 @@
 
                 <td class="td">
                     <div class="flex items-center justify-end gap-3 text-neutral-500">
+                        <a href="/presupuestos/{{ p.id_presupuesto }}/items"
+                            class="hover:text-sefel-black" aria-label="Ver ítems de {{ p.code }}">
+                            {{ icono("ver", "size-[18px]") }}
+                        </a>
+
                         <a href="/presupuestos/{{ p.id_presupuesto }}/editar"
-                           class="hover:text-sefel-black" aria-label="Editar {{ p.code }}"
-                           hx-get="/presupuestos/{{ p.id_presupuesto }}/editar"
-                           hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
-                           @click="$dispatch('abrir-modal-presupuesto')">
+                            class="hover:text-sefel-black" aria-label="Editar {{ p.code }}"
+                            hx-get="/presupuestos/{{ p.id_presupuesto }}/editar"
+                            hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
+                            @click="$dispatch('abrir-modal-presupuesto')">
                             {{ icono("editar", "size-[18px]") }}
                         </a>
                     </div>

@@ -1,0 +1,48 @@
+<div class="overflow-x-auto">
+    <table class="w-full text-sm">
+        <thead class="border-y border-gray-100 bg-gray-50">
+            <tr>
+                <th class="th">APU</th>
+                <th class="th">Unidad</th>
+                <th class="th text-right">Cantidad</th>
+                <th class="th text-right">Costo unitario</th>
+                <th class="th text-right">Subtotal</th>
+                <th class="th text-right">Costo directo</th>
+                <th class="th text-right">Costo indirecto</th>
+            </tr>
+        </thead>
+
+        <tbody class="divide-y divide-gray-100">
+            {% for fila in filas %}
+            <tr>
+                <td class="td">
+                    <span class="font-semibold text-sefel-black">{{ fila.item.apu.code }}</span>
+                    · {{ fila.item.apu.name }}
+                </td>
+                <td class="td text-neutral-500">{{ fila.item.unit }}</td>
+                <td class="td whitespace-nowrap text-right">{{ fila.item.cantidad | cantidad }}</td>
+                <td class="td whitespace-nowrap text-right">{{ fila.item.estimated_unit_cost | clp }}</td>
+                <td class="td whitespace-nowrap text-right font-bold text-sefel-black">{{ fila.subtotal | clp }}</td>
+                <td class="td whitespace-nowrap text-right text-neutral-500">{{ fila.item.costo_directo | clp }}</td>
+                <td class="td whitespace-nowrap text-right text-neutral-500">{{ fila.item.costo_indirecto | clp }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="td py-10 text-center text-neutral-500">
+                    Este presupuesto aún no tiene ítems.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+
+        <tfoot class="border-t border-gray-200 bg-gray-50">
+            <tr>
+                <td colspan="4" class="td font-bold text-sefel-black">Total estimado</td>
+                <td id="total-presupuesto" class="td whitespace-nowrap text-right font-bold text-sefel-black">
+                    {{ total | clp }}
+                </td>
+                <td colspan="2"></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>

@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 import pytest
 from sqlmodel import select
@@ -7,6 +8,7 @@ from app.core.security import hashPassword
 from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto
 from app.models.user import Presupuesto, User, UserRole
+from app.services.calculations import calculate_item_subtotal
 
 
 @pytest.fixture
@@ -185,3 +187,88 @@ def test_viewer_recibe_403_al_agregar_items(
     )
 
     assert response.status_code == 403
+
+# Lista, cálculo y validación decimal
+# ==========================================
+
+def test_lista_muestra_subtotal_por_item_y_total(
+    logged_in_client, session, presupuesto, apu
+):
+    for cantidad, costo in [("3", "10500"), ("2", "1000")]:
+        item = DetallePresupuesto(
+            id_presupuesto=presupuesto.id_presupuesto, id_apu=apu.id, unit="kg",
+            cantidad=Decimal(cantidad), estimated_unit_cost=Decimal(costo),
+            subtotal=Decimal(0), costo_directo=Decimal(0), costo_indirecto=Decimal(0),
+        )
+        item.subtotal = calculate_item_subtotal(item)
+        session.add(item)
+    session.commit()
+
+    response = logged_in_client.get(f"/presupuestos/{presupuesto.id_presupuesto}/items")
+
+    assert response.status_code == 200
+    assert "$ 31.500" in response.text   # 3 * 10500
+    assert "$ 2.000" in response.text    # 2 * 1000
+    assert "$ 33.500" in response.text   # total
+
+
+def test_lista_vacia_muestra_mensaje(logged_in_client, presupuesto):
+    response = logged_in_client.get(f"/presupuestos/{presupuesto.id_presupuesto}/items")
+
+    assert response.status_code == 200
+    assert "aún no tiene ítems" in response.text
+
+
+def test_agregar_item_con_cantidad_decimal_y_coma(
+    logged_in_client, session, presupuesto, apu
+):
+    datos = datosItem(apu, cantidad="12,5", estimated_unit_cost="2500")
+
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items",
+        data=datos, follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    item = session.exec(select(DetallePresupuesto)).first()
+    assert item.cantidad == Decimal("12.5")
+    assert item.subtotal == Decimal("31250")
+
+
+def test_subtotal_se_redondea_half_up_a_pesos(
+    logged_in_client, session, presupuesto, apu
+):
+    # 0.5 * 1 = 0.5 -> half-up sube a 1 (half-even daría 0)
+    datos = datosItem(apu, cantidad="0.5", estimated_unit_cost="1")
+
+    logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items",
+        data=datos, follow_redirects=False,
+    )
+
+    item = session.exec(select(DetallePresupuesto)).first()
+    assert item.subtotal == Decimal("1")
+
+
+@pytest.mark.parametrize(
+    "campo, valor",
+    [
+        ("cantidad", "0"),
+        ("cantidad", "-1"),
+        ("cantidad", "abc"),
+        ("cantidad", "1.234"),
+        ("estimated_unit_cost", "-5"),
+        ("costo_directo", "nan"),
+        ("costo_indirecto", "inf"),
+    ],
+)
+def test_rechaza_valores_numericos_invalidos(
+    logged_in_client, session, presupuesto, apu, campo, valor
+):
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items",
+        data=datosItem(apu, **{campo: valor}),
+    )
+
+    assert response.status_code == 400
+    assert session.exec(select(DetallePresupuesto)).first() is None

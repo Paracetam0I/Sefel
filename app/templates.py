@@ -3,7 +3,7 @@ import sys
 
 from fastapi.templating import Jinja2Templates
 from app.core.flash import getFlashedMessages
-from app.core.formato import etiquetaRol, formatearClp, formatearFecha, iniciales
+from app.core.formato import etiquetaRol, formatearClp, formatearFecha, iniciales, formatearCantidad
 
 def getBaseDir() -> str:
     # Si PyInstaller congeló la app, los recursos están en sys._MEIPASS
@@ -23,3 +23,4 @@ templates.env.filters["clp"] = formatearClp
 templates.env.filters["fecha"] = formatearFecha
 templates.env.filters["rol_label"] = etiquetaRol
 templates.env.filters["iniciales"] = iniciales
+templates.env.filters["cantidad"] = formatearCantidad

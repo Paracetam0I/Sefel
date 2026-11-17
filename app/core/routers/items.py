@@ -3,7 +3,9 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
+from decimal import Decimal, InvalidOperation
 
+from app.services.calculations import calculate_budget_total, calculate_item_subtotal
 from app.core.db import getSession
 from app.core.dependencies import CurrentUser, requireRoles
 from app.core.flash import flash
@@ -47,6 +49,24 @@ def _entero(valor: str, minimo: int = 0) -> int | None:
     return numero if numero >= minimo else None
 
 
+MAX_DECIMALES = 2
+VALOR_MAXIMO = Decimal("999999999999")
+
+
+def _decimal(valor: str) -> Decimal | None:
+    """Texto -> Decimal ('12,5' o '12.5'). None si no es válido.
+
+    Rechaza: vacío, NaN/Infinity, negativos, más de 2 decimales y valores gigantes.
+    """
+    try:
+        numero = Decimal(valor.strip().replace(",", "."))
+    except (InvalidOperation, AttributeError):
+        return None
+    if not numero.is_finite() or numero < 0 or numero > VALOR_MAXIMO:
+        return None
+    if numero.as_tuple().exponent < -MAX_DECIMALES:
+        return None
+    return numero
 def _renderFormulario(
     request: Request,
     usuario,
@@ -134,6 +154,37 @@ def mostrarFormularioItem(
 
     return _renderFormulario(request, usuario, presupuesto)
 
+@router.get("/presupuestos/{presupuesto_id}/items")
+def listarItems(
+    presupuesto_id: int,
+    request: Request,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    presupuesto = _presupuestoDelUsuario(session, presupuesto_id, usuario)
+    if presupuesto is None:
+        flash(request, "El presupuesto solicitado no existe.", "error")
+        return RedirectResponse(LISTA_URL, status_code=303)
+
+    items = session.exec(
+        select(DetallePresupuesto)
+        .where(DetallePresupuesto.id_presupuesto == presupuesto.id_presupuesto)
+        .order_by(DetallePresupuesto.id)
+    ).all()
+
+    # El subtotal que se muestra sale de la función, no del valor guardado
+    filas = [{"item": item, "subtotal": calculate_item_subtotal(item)} for item in items]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="items.html",
+        context={
+            "usuario": usuario,
+            "presupuesto": presupuesto,
+            "filas": filas,
+            "total": calculate_budget_total(items),
+        },
+    )
 
 @router.post("/presupuestos/{presupuesto_id}/items")
 def crearItem(
@@ -166,10 +217,10 @@ def crearItem(
 
     # Convertir y buscar (el navegador solo manda texto)
     apu_id = _entero(id_apu, 1)
-    costo_estimado = _entero(estimated_unit_cost)
-    cant = _entero(cantidad, 1)
-    directo = _entero(costo_directo)
-    indirecto = _entero(costo_indirecto)
+    costo_estimado = _decimal(estimated_unit_cost)
+    cant = _decimal(cantidad)
+    directo = _decimal(costo_directo)
+    indirecto = _decimal(costo_indirecto)
     unidad = unit.strip()
 
     apu = session.get(APU, apu_id) if apu_id else None
@@ -182,11 +233,11 @@ def crearItem(
     elif not unidad or len(unidad) > 30:
         error = "La unidad es obligatoria (máximo 30 caracteres)."
     elif costo_estimado is None:
-        error = "El costo unitario debe ser un entero mayor o igual a 0."
-    elif cant is None:
-        error = "La cantidad debe ser un entero mayor o igual a 1."
+        error = "El costo unitario debe ser un número mayor o igual a 0 (máximo 2 decimales)."
+    elif cant is None or cant <= 0:
+        error = "La cantidad debe ser un número mayor a 0 (máximo 2 decimales)."
     elif directo is None or indirecto is None:
-        error = "Los costos directo e indirecto deben ser enteros mayores o iguales a 0."
+        error = "Los costos directo e indirecto deben ser números mayores o iguales a 0 (máximo 2 decimales)."
     elif len(descripcion.strip()) > 500:
         error = "La descripción no puede superar los 500 caracteres."
 
@@ -202,11 +253,12 @@ def crearItem(
         unit=unidad,                           # copia editable: lo que mandó el formulario
         estimated_unit_cost=costo_estimado,    # no se vuelve a leer del catálogo
         cantidad=cant,
-        subtotal=cant * costo_estimado,        # lo calcula el servidor
+        subtotal=Decimal(0),                   # se calcula en la línea siguiente
         costo_directo=directo,
         costo_indirecto=indirecto,
         descripcion=descripcion.strip() or None,
     )
+    item.subtotal = calculate_item_subtotal(item)  # única fuente de verdad del cálculo
     session.add(item)
 
     try:
@@ -221,6 +273,6 @@ def crearItem(
 
     flash(request, "Ítem agregado correctamente.", "success")
     return RedirectResponse(
-        f"/presupuestos/{presupuesto.id_presupuesto}/items/nuevo",
+        f"/presupuestos/{presupuesto.id_presupuesto}/items",
         status_code=303,
     )
