@@ -17,6 +17,11 @@
 | `/presupuestos/{id}/editar` | GET | Login (`CurrentUser`) | Redirige a `/login` |
 | `/presupuestos/{id}` | POST | Login (`CurrentUser`) | Redirige a `/login` |
 | `/presupuestos/{id}/estado` | POST | Login (`CurrentUser`) | Redirige a `/login` |
+| `/presupuestos/{id}/items` | GET, POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/nuevo` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}/editar` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}` | POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}/eliminar` | POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
 | `/apu` | GET, POST | Login (`CurrentUser`) | Redirige a `/login` |
 | `/apu/nuevo` | GET | Login (`CurrentUser`) | Redirige a `/login` |
 | `/apu/{id}/editar` | GET | Login (`CurrentUser`) | Redirige a `/login` |
@@ -33,11 +38,6 @@
 | `/prueba/solo-admin` | GET | Rol `ADMIN` (ruta de prueba) | Redirige a `/login`; con otro rol, 403 |
 | `/prueba/presupuestos` | GET | Rol `ADMIN` o `BUDGETS` (ruta de prueba) | Redirige a `/login`; con otro rol, 403 |
 | `/docs`, `/redoc`, `/openapi.json` | GET | Desactivadas | 404 |
-| `/presupuestos/{id}/items` | GET, POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
-| `/presupuestos/{id}/items/nuevo` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
-| `/presupuestos/{id}/items/{item_id}/editar` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
-| `/presupuestos/{id}/items/{item_id}` | POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
-| `/presupuestos/{id}/items/{item_id}/eliminar` | POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
 
 ## Cómo responde cada tipo de petición cuando falta la sesión o el permiso
 - **Navegador:** sin sesión, redirección a `/login?next=...`; con rol insuficiente, página 403.
@@ -56,8 +56,8 @@ En una ventana privada nueva, abrir cada ruta del inventario:
 - [x] `/docs`, `/redoc` y `/openapi.json` responden 404.
 - [x] `/login` y `/static/css/output.css` son accesibles.
 - [x] Con sesión de rol insuficiente, las rutas de rol muestran la página 403 (o JSON 403 bajo `/api/`).
-- [x]Para comprobar que esta tabla coincide con las rutas reales de la app: `python -m scripts.listar_rutas`
 
+Para comprobar que esta tabla coincide con las rutas reales de la app: `python -m scripts.listar_rutas`
 
 ## Pendiente
 Las rutas `/protegido` y `/prueba/*` son de prueba y se eliminarán cuando existan las páginas reales. Las rutas de administración usan `requireRoles(UserRole.ADMIN)`.
