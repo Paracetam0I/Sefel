@@ -35,6 +35,7 @@
 | `/prueba/solo-admin` | GET | Rol `ADMIN` (ruta de prueba) | Redirige a `/login`; con otro rol, 403 |
 | `/prueba/presupuestos` | GET | Rol `ADMIN` o `BUDGETS` (ruta de prueba) | Redirige a `/login`; con otro rol, 403 |
 | `/docs`, `/redoc`, `/openapi.json` | GET | Desactivadas | 404 |
+| `/presupuestos/{id}/items` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
 
 ## Cómo responde cada tipo de petición cuando falta la sesión o el permiso
 - **Navegador:** sin sesión, redirección a `/login?next=...`; con rol insuficiente, página 403.
@@ -54,6 +55,7 @@ En una ventana privada nueva, abrir cada ruta del inventario:
 - [x] `/login` y `/static/css/output.css` son accesibles.
 - [x] Con sesión de rol insuficiente, las rutas de rol muestran la página 403 (o JSON 403 bajo `/api/`).
 - [x]Para comprobar que esta tabla coincide con las rutas reales de la app: `python -m scripts.listar_rutas`
+
 
 ## Pendiente
 Las rutas `/protegido` y `/prueba/*` son de prueba y se eliminarán cuando existan las páginas reales. Todavía no hay una pantalla que liste los ítems de un presupuesto. Las rutas de administración usan `requireRoles(UserRole.ADMIN)`.

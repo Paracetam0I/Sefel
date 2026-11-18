@@ -1,76 +1,14 @@
 {% extends "base.html" %}
 {% from "partials/ui.html" import encabezado %}
 
-{% block title %}Agregar ítem{% endblock title %}
+{% block title %}{{ 'Editar ítem' if modo == 'editar' else 'Agregar ítem' }}{% endblock title %}
 
 {% block content %}
-{% call encabezado("Agregar ítem", "Presupuesto " ~ presupuesto.code ~ " · " ~ presupuesto.client_name) %}
-    <a href="/presupuestos" class="btn btn-outline">Volver</a>
+{% call encabezado('Editar ítem' if modo == 'editar' else 'Agregar ítem', "Presupuesto " ~ presupuesto.code ~ " · " ~ presupuesto.client_name) %}
+    <a href="/presupuestos/{{ presupuesto.id_presupuesto }}/items" class="btn btn-outline">Volver</a>
 {% endcall %}
 
 <section class="card mt-8 p-6">
-    {% if error %}
-    <div class="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
-        {{ error }}
-    </div>
-    {% endif %}
-
-    <form method="post" action="/presupuestos/{{ presupuesto.id_presupuesto }}/items" class="space-y-6">
-
-        {# 1) Buscador de APU: cada pausa de 300 ms pide la lista a /api/apu/buscar #}
-        <div>
-            <label for="buscar-apu" class="label">APU</label>
-            <input
-                id="buscar-apu"
-                type="search"
-                name="q"
-                placeholder="Buscar por código o nombre…"
-                autocomplete="off"
-                class="field w-full"
-                x-data
-                @keydown.enter.prevent
-                hx-get="/api/apu/buscar"
-                hx-trigger="input changed delay:300ms, search"
-                hx-target="#resultados-apu"
-                hx-swap="innerHTML"
-            >
-            <div id="resultados-apu" class="mt-2"></div>
-        </div>
-
-        {# 2) Unidad y costo: aquí cae la pieza que autocompleta (campos editables) #}
-        <div id="campos-apu">
-            {% if apu %}{% include "partials/apu/autocompletar_campos.html" %}{% endif %}
-        </div>
-
-        {# 3) Cantidad y costos #}
-        <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
-            <div>
-                <label for="cantidad" class="label">Cantidad</label>
-                <input id="cantidad" name="cantidad" type="number" min="0.01" step="0.01" required
-                    value="{{ datos.cantidad if datos else 1 }}" class="field w-full">
-            </div>
-            <div>
-                <label for="costo_directo" class="label">Costo directo (CLP)</label>
-                <input id="costo_directo" name="costo_directo" type="number" min="0" step="0.01" required
-                    value="{{ datos.costo_directo if datos else 0 }}" class="field w-full">
-            </div>
-            <div>
-                <label for="costo_indirecto" class="label">Costo indirecto (CLP)</label>
-                <input id="costo_indirecto" name="costo_indirecto" type="number" min="0" step="0.01" required
-                    value="{{ datos.costo_indirecto if datos else 0 }}" class="field w-full">
-            </div>
-        </div>
-
-        <div>
-            <label for="descripcion" class="label">Descripción</label>
-            <textarea id="descripcion" name="descripcion" rows="3" maxlength="500"
-                      class="field w-full">{{ datos.descripcion if datos else '' }}</textarea>
-        </div>
-
-        <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
-            <a href="/presupuestos" class="btn btn-outline">Cancelar</a>
-            <button type="submit" class="btn btn-primary">Guardar ítem</button>
-        </div>
-    </form>
+    {% include "partials/item/formulario.html" %}
 </section>
 {% endblock content %}

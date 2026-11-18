@@ -272,3 +272,181 @@ def test_rechaza_valores_numericos_invalidos(
 
     assert response.status_code == 400
     assert session.exec(select(DetallePresupuesto)).first() is None
+
+# Modal con HTMX
+# ==========================================
+
+HTMX = {"HX-Request": "true"}
+
+
+def test_formulario_por_htmx_devuelve_solo_el_fragmento(
+    logged_in_client, presupuesto
+):
+    response = logged_in_client.get(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/nuevo", headers=HTMX
+    )
+
+    assert response.status_code == 200
+    assert "<html" not in response.text
+    assert "Guardar ítem" in response.text
+
+
+def test_agregar_item_por_htmx_devuelve_la_tabla_y_cierra_el_modal(
+    logged_in_client, session, presupuesto, apu
+):
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items",
+        data=datosItem(apu), headers=HTMX,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["HX-Retarget"] == "#items-presupuesto"
+    assert response.headers["HX-Trigger-After-Swap"] == "cerrar-modal-presupuesto"
+    assert "$ 31.500" in response.text          # subtotal 3 * 10500
+    assert 'id="total-presupuesto"' in response.text
+    assert session.exec(select(DetallePresupuesto)).first() is not None
+
+
+def test_error_por_htmx_se_queda_dentro_del_modal(
+    logged_in_client, session, presupuesto, apu_inactivo
+):
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items",
+        data=datosItem(apu_inactivo), headers=HTMX,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["HX-Retarget"] == "#modal-presupuesto-body"
+    assert "APU activo" in response.text
+    assert session.exec(select(DetallePresupuesto)).first() is None
+
+# Editar ítems
+# ==========================================
+
+@pytest.fixture
+def item_existente(session, presupuesto, apu):
+    item = DetallePresupuesto(
+        id_presupuesto=presupuesto.id_presupuesto, id_apu=apu.id, unit="kg",
+        cantidad=Decimal("3"), estimated_unit_cost=Decimal("10500"),
+        subtotal=Decimal("31500"),
+        costo_directo=Decimal("0"), costo_indirecto=Decimal("0"),
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+def datosEdicion(**cambios):
+    datos = {
+        "unit": "kg",
+        "estimated_unit_cost": "12000",
+        "cantidad": "2,5",
+        "costo_directo": "100",
+        "costo_indirecto": "50",
+    }
+    datos.update(cambios)
+    return datos
+
+
+def test_formulario_de_edicion_precarga_los_valores(
+    logged_in_client, presupuesto, item_existente
+):
+    response = logged_in_client.get(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}/editar",
+        headers=HTMX,
+    )
+
+    assert response.status_code == 200
+    assert 'value="10500"' in response.text
+    assert 'value="3"' in response.text
+    assert "Guardar cambios" in response.text
+
+
+def test_editar_item_recalcula_el_subtotal_y_no_cambia_el_apu(
+    logged_in_client, session, presupuesto, item_existente, apu, apu_inactivo
+):
+    # Se intenta cambiar el APU a mano: el servidor debe ignorarlo
+    datos = datosEdicion(id_apu=str(apu_inactivo.id))
+
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}",
+        data=datos, follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    session.refresh(item_existente)
+    assert item_existente.estimated_unit_cost == Decimal("12000")
+    assert item_existente.cantidad == Decimal("2.5")
+    assert item_existente.subtotal == Decimal("30000")   # 2.5 * 12000
+    assert item_existente.id_apu == apu.id
+
+
+def test_editar_por_htmx_devuelve_la_tabla_con_el_total_nuevo(
+    logged_in_client, presupuesto, item_existente
+):
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}",
+        data=datosEdicion(), headers=HTMX,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["HX-Retarget"] == "#items-presupuesto"
+    assert response.headers["HX-Trigger-After-Swap"] == "cerrar-modal-presupuesto"
+    assert "$ 30.000" in response.text   # subtotal y total ya recalculados
+
+
+def test_editar_con_valores_invalidos_se_queda_en_el_modal(
+    logged_in_client, session, presupuesto, item_existente
+):
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}",
+        data=datosEdicion(cantidad="0"), headers=HTMX,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["HX-Retarget"] == "#modal-presupuesto-body"
+    assert "La cantidad debe ser" in response.text
+    session.refresh(item_existente)
+    assert item_existente.cantidad == Decimal("3")
+
+
+def test_no_edita_items_de_otro_usuario(logged_in_client, session, apu):
+    otro = User(
+        username="otro", email="otro@example.com",
+        hashed_password=hashPassword("Otra12345"),
+        full_name="Otro usuario", role=UserRole.BUDGETS, is_active=True,
+    )
+    session.add(otro)
+    session.commit()
+    session.refresh(otro)
+
+    ajeno = Presupuesto(
+        id_usuario=otro.id, code="PRE-AJENO", client_name="Cliente",
+        estimate_income=1000000,
+        start_date=datetime(2026, 11, 1), end_date=datetime(2026, 12, 31),
+        description="De otro usuario",
+    )
+    session.add(ajeno)
+    session.commit()
+    session.refresh(ajeno)
+
+    item = DetallePresupuesto(
+        id_presupuesto=ajeno.id_presupuesto, id_apu=apu.id, unit="kg",
+        cantidad=Decimal("3"), estimated_unit_cost=Decimal("10500"),
+        subtotal=Decimal("31500"),
+        costo_directo=Decimal("0"), costo_indirecto=Decimal("0"),
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+
+    response = logged_in_client.post(
+        f"/presupuestos/{ajeno.id_presupuesto}/items/{item.id}",
+        data=datosEdicion(), follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/presupuestos"
+    session.refresh(item)
+    assert item.estimated_unit_cost == Decimal("10500")   # sin cambios

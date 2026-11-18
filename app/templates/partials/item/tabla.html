@@ -1,3 +1,5 @@
+{% from "partials/ui.html" import icono %}
+
 <div class="overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="border-y border-gray-100 bg-gray-50">
@@ -9,12 +11,13 @@
                 <th class="th text-right">Subtotal</th>
                 <th class="th text-right">Costo directo</th>
                 <th class="th text-right">Costo indirecto</th>
+                <th class="th"><span class="sr-only">Acciones</span></th>
             </tr>
         </thead>
 
         <tbody class="divide-y divide-gray-100">
             {% for fila in filas %}
-            <tr>
+            <tr id="item-{{ fila.item.id }}">
                 <td class="td">
                     <span class="font-semibold text-sefel-black">{{ fila.item.apu.code }}</span>
                     · {{ fila.item.apu.name }}
@@ -25,10 +28,22 @@
                 <td class="td whitespace-nowrap text-right font-bold text-sefel-black">{{ fila.subtotal | clp }}</td>
                 <td class="td whitespace-nowrap text-right text-neutral-500">{{ fila.item.costo_directo | clp }}</td>
                 <td class="td whitespace-nowrap text-right text-neutral-500">{{ fila.item.costo_indirecto | clp }}</td>
+                <td class="td">
+                    <div class="flex items-center justify-end gap-3 text-neutral-500">
+                        <button type="button" class="hover:text-sefel-black"
+                                aria-label="Editar ítem de {{ fila.item.apu.code }}"
+                                x-data
+                                hx-get="/presupuestos/{{ presupuesto.id_presupuesto }}/items/{{ fila.item.id }}/editar"
+                                hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
+                                @click="$dispatch('abrir-modal-presupuesto')">
+                            {{ icono("editar", "size-[18px]") }}
+                        </button>
+                    </div>
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="7" class="td py-10 text-center text-neutral-500">
+                <td colspan="8" class="td py-10 text-center text-neutral-500">
                     Este presupuesto aún no tiene ítems.
                 </td>
             </tr>
@@ -41,7 +56,7 @@
                 <td id="total-presupuesto" class="td whitespace-nowrap text-right font-bold text-sefel-black">
                     {{ total | clp }}
                 </td>
-                <td colspan="2"></td>
+                <td colspan="3"></td>
             </tr>
         </tfoot>
     </table>

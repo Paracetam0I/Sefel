@@ -1,0 +1,88 @@
+{% set editando = (modo == 'editar') %}
+{% set url = '/presupuestos/' ~ presupuesto.id_presupuesto ~ '/items' ~ ('/' ~ item.id if editando else '') %}
+
+{% if modal %}
+<h2 class="mb-5 text-lg font-bold text-sefel-black">
+    {{ 'Editar ítem' if editando else 'Agregar ítem' }}
+</h2>
+{% endif %}
+
+{% if error %}
+<div class="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+    {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="{{ url }}"
+      hx-post="{{ url }}"
+      hx-target="#items-presupuesto" hx-swap="innerHTML"
+      class="space-y-6">
+
+    {% if editando %}
+        {# Editar: el APU queda fijo (trazabilidad) y los valores vienen precargados #}
+        <p class="text-sm text-neutral-500">
+            El APU no se puede cambiar: es el origen del ítem. Para usar otro, elimina este ítem y crea uno nuevo.
+        </p>
+    {% else %}
+        {# Crear: buscador de APU, cada pausa de 300 ms pide la lista a /api/apu/buscar #}
+        <div>
+            <label for="buscar-apu" class="label">APU</label>
+            <input
+                id="buscar-apu"
+                type="search"
+                name="q"
+                placeholder="Buscar por código o nombre…"
+                autocomplete="off"
+                class="field w-full"
+                x-data
+                @keydown.enter.prevent
+                hx-get="/api/apu/buscar"
+                hx-trigger="input changed delay:300ms, search"
+                hx-target="#resultados-apu"
+                hx-swap="innerHTML"
+            >
+            <div id="resultados-apu" class="mt-2"></div>
+        </div>
+    {% endif %}
+
+    {# Unidad y costo: al crear cae aquí la pieza que autocompleta; al editar ya viene lista #}
+    <div id="campos-apu">
+        {% if apu %}{% include "partials/apu/autocompletar_campos.html" %}{% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div>
+            <label for="cantidad" class="label">Cantidad</label>
+            <input id="cantidad" name="cantidad" type="number" min="0.01" step="0.01" required
+                   value="{{ datos.cantidad if datos else 1 }}" class="field w-full">
+        </div>
+        <div>
+            <label for="costo_directo" class="label">Costo directo (CLP)</label>
+            <input id="costo_directo" name="costo_directo" type="number" min="0" step="0.01" required
+                   value="{{ datos.costo_directo if datos else 0 }}" class="field w-full">
+        </div>
+        <div>
+            <label for="costo_indirecto" class="label">Costo indirecto (CLP)</label>
+            <input id="costo_indirecto" name="costo_indirecto" type="number" min="0" step="0.01" required
+                   value="{{ datos.costo_indirecto if datos else 0 }}" class="field w-full">
+        </div>
+    </div>
+
+    <div>
+        <label for="descripcion" class="label">Descripción</label>
+        <textarea id="descripcion" name="descripcion" rows="3" maxlength="500"
+                  class="field w-full">{{ datos.descripcion if datos else '' }}</textarea>
+    </div>
+
+    <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
+        {% if modal %}
+        <button type="button" class="btn btn-outline"
+                @click="$dispatch('cerrar-modal-presupuesto')">Cancelar</button>
+        {% else %}
+        <a href="/presupuestos/{{ presupuesto.id_presupuesto }}/items" class="btn btn-outline">Cancelar</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">
+            {{ 'Guardar cambios' if editando else 'Guardar ítem' }}
+        </button>
+    </div>
+</form>
