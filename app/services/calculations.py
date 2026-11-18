@@ -11,7 +11,7 @@ Reglas del proyecto:
 
 from decimal import ROUND_HALF_UP, Decimal
 
-DECIMALES_MONEDA = 2  # CLP: pesos enteros (con 2 serían centavos)
+DECIMALES_MONEDA = 0  # CLP: pesos enteros (con 2 serían centavos)
 UNIDAD_MINIMA = Decimal(1).scaleb(-DECIMALES_MONEDA)
 REDONDEO = ROUND_HALF_UP
 CERO = Decimal(0).quantize(UNIDAD_MINIMA)
