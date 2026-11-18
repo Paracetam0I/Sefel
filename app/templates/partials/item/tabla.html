@@ -38,6 +38,14 @@
                                 @click="$dispatch('abrir-modal-presupuesto')">
                             {{ icono("editar", "size-[18px]") }}
                         </button>
+
+                        <button type="button" class="hover:text-red-600"
+                                aria-label="Eliminar ítem de {{ fila.item.apu.code }}"
+                                hx-post="/presupuestos/{{ presupuesto.id_presupuesto }}/items/{{ fila.item.id }}/eliminar"
+                                hx-confirm="¿Eliminar este ítem? Esta acción no se puede deshacer."
+                                hx-target="#items-presupuesto" hx-swap="innerHTML">
+                            {{ icono("papelera", "size-[18px]") }}
+                        </button>
                     </div>
                 </td>
             </tr>

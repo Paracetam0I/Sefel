@@ -155,8 +155,13 @@ def _contextoTabla(session: Session, presupuesto: Presupuesto) -> dict:
     }
 
 
-def _respuestaTabla(request: Request, session: Session, presupuesto: Presupuesto):
-    """La tabla completa (filas y total juntos) y cierra el modal DESPUÉS de dibujarla."""
+def _respuestaTabla(
+    request: Request,
+    session: Session,
+    presupuesto: Presupuesto,
+    cerrar_modal: bool = True,
+):
+    """La tabla completa (filas y total juntos). Cierra el modal DESPUÉS de dibujarla."""
     respuesta = templates.TemplateResponse(
         request=request,
         name="partials/item/tabla.html",
@@ -164,7 +169,8 @@ def _respuestaTabla(request: Request, session: Session, presupuesto: Presupuesto
     )
     respuesta.headers["HX-Retarget"] = "#items-presupuesto"
     respuesta.headers["HX-Reswap"] = "innerHTML"
-    respuesta.headers["HX-Trigger-After-Swap"] = "cerrar-modal-presupuesto"
+    if cerrar_modal:
+        respuesta.headers["HX-Trigger-After-Swap"] = "cerrar-modal-presupuesto"
     return respuesta
 
 
@@ -449,6 +455,39 @@ def actualizarItem(
         return _respuestaTabla(request, session, presupuesto)
 
     flash(request, "Ítem actualizado correctamente.", "success")
+    return RedirectResponse(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items", status_code=303
+    )
+
+# Eliminar ítem
+# ==========================================
+
+@router.post("/presupuestos/{presupuesto_id}/items/{item_id}/eliminar")
+def eliminarItem(
+    presupuesto_id: int,
+    item_id: int,
+    request: Request,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    presupuesto, item = _itemDelUsuario(session, presupuesto_id, item_id, usuario)
+
+    # El ítem ya no existe (otra pestaña, doble clic): se muestra la tabla tal como está
+    if item is None and presupuesto is not None and _esHtmx(request):
+        return _respuestaTabla(request, session, presupuesto, cerrar_modal=False)
+
+    if item is None:
+        flash(request, "El ítem solicitado no existe.", "error")
+        destino = f"/presupuestos/{presupuesto_id}/items" if presupuesto else LISTA_URL
+        return RedirectResponse(destino, status_code=303)
+
+    session.delete(item)
+    session.commit()
+
+    if _esHtmx(request):
+        return _respuestaTabla(request, session, presupuesto, cerrar_modal=False)
+
+    flash(request, "Ítem eliminado correctamente.", "success")
     return RedirectResponse(
         f"/presupuestos/{presupuesto.id_presupuesto}/items", status_code=303
     )

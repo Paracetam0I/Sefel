@@ -450,3 +450,108 @@ def test_no_edita_items_de_otro_usuario(logged_in_client, session, apu):
     assert response.headers["location"] == "/presupuestos"
     session.refresh(item)
     assert item.estimated_unit_cost == Decimal("10500")   # sin cambios
+
+# Eliminar ítems
+# ==========================================
+
+def test_eliminar_item_por_htmx_devuelve_la_tabla_sin_cerrar_modal(
+    logged_in_client, session, presupuesto, item_existente
+):
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}/eliminar",
+        headers=HTMX,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["HX-Retarget"] == "#items-presupuesto"
+    assert "HX-Trigger-After-Swap" not in response.headers
+    assert "aún no tiene ítems" in response.text
+    assert session.exec(select(DetallePresupuesto)).first() is None
+
+
+def test_el_total_baja_al_eliminar_un_item(
+    logged_in_client, session, presupuesto, apu, item_existente
+):
+    segundo = DetallePresupuesto(
+        id_presupuesto=presupuesto.id_presupuesto, id_apu=apu.id, unit="kg",
+        cantidad=Decimal("2"), estimated_unit_cost=Decimal("1000"),
+        subtotal=Decimal("2000"),
+        costo_directo=Decimal("0"), costo_indirecto=Decimal("0"),
+    )
+    session.add(segundo)
+    session.commit()
+
+    # item_existente vale 31.500; el total era 33.500. Se elimina el grande.
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}/eliminar",
+        headers=HTMX,
+    )
+
+    assert response.status_code == 200
+    assert "$ 2.000" in response.text         # subtotal restante y total nuevo
+    assert "$ 33.500" not in response.text
+    assert "$ 31.500" not in response.text
+
+
+def test_eliminar_sin_htmx_redirige_a_la_lista(
+    logged_in_client, presupuesto, item_existente
+):
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}/eliminar",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/presupuestos/{presupuesto.id_presupuesto}/items"
+
+
+def test_eliminar_dos_veces_no_falla(
+    logged_in_client, presupuesto, item_existente
+):
+    url = f"/presupuestos/{presupuesto.id_presupuesto}/items/{item_existente.id}/eliminar"
+
+    logged_in_client.post(url, headers=HTMX)
+    response = logged_in_client.post(url, headers=HTMX)
+
+    assert response.status_code == 200
+    assert "aún no tiene ítems" in response.text
+
+
+def test_no_elimina_items_de_otro_usuario(logged_in_client, session, apu):
+    otro = User(
+        username="otro", email="otro@example.com",
+        hashed_password=hashPassword("Otra12345"),
+        full_name="Otro usuario", role=UserRole.BUDGETS, is_active=True,
+    )
+    session.add(otro)
+    session.commit()
+    session.refresh(otro)
+
+    ajeno = Presupuesto(
+        id_usuario=otro.id, code="PRE-AJENO", client_name="Cliente",
+        estimate_income=1000000,
+        start_date=datetime(2026, 11, 1), end_date=datetime(2026, 12, 31),
+        description="De otro usuario",
+    )
+    session.add(ajeno)
+    session.commit()
+    session.refresh(ajeno)
+
+    item = DetallePresupuesto(
+        id_presupuesto=ajeno.id_presupuesto, id_apu=apu.id, unit="kg",
+        cantidad=Decimal("3"), estimated_unit_cost=Decimal("10500"),
+        subtotal=Decimal("31500"),
+        costo_directo=Decimal("0"), costo_indirecto=Decimal("0"),
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+
+    response = logged_in_client.post(
+        f"/presupuestos/{ajeno.id_presupuesto}/items/{item.id}/eliminar",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/presupuestos"
+    assert session.get(DetallePresupuesto, item.id) is not None   # sigue existiendo

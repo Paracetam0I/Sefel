@@ -17,8 +17,6 @@
 | `/presupuestos/{id}/editar` | GET | Login (`CurrentUser`) | Redirige a `/login` |
 | `/presupuestos/{id}` | POST | Login (`CurrentUser`) | Redirige a `/login` |
 | `/presupuestos/{id}/estado` | POST | Login (`CurrentUser`) | Redirige a `/login` |
-| `/presupuestos/{id}/items/nuevo` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
-| `/presupuestos/{id}/items` | POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
 | `/apu` | GET, POST | Login (`CurrentUser`) | Redirige a `/login` |
 | `/apu/nuevo` | GET | Login (`CurrentUser`) | Redirige a `/login` |
 | `/apu/{id}/editar` | GET | Login (`CurrentUser`) | Redirige a `/login` |
@@ -35,7 +33,11 @@
 | `/prueba/solo-admin` | GET | Rol `ADMIN` (ruta de prueba) | Redirige a `/login`; con otro rol, 403 |
 | `/prueba/presupuestos` | GET | Rol `ADMIN` o `BUDGETS` (ruta de prueba) | Redirige a `/login`; con otro rol, 403 |
 | `/docs`, `/redoc`, `/openapi.json` | GET | Desactivadas | 404 |
-| `/presupuestos/{id}/items` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items` | GET, POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/nuevo` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}/editar` | GET | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}` | POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}/eliminar` | POST | Rol `ADMIN`, `BUDGETS` o `BOTH`, y presupuesto propio | Redirige a `/login`; con otro rol, 403 |
 
 ## Cómo responde cada tipo de petición cuando falta la sesión o el permiso
 - **Navegador:** sin sesión, redirección a `/login?next=...`; con rol insuficiente, página 403.
@@ -58,4 +60,4 @@ En una ventana privada nueva, abrir cada ruta del inventario:
 
 
 ## Pendiente
-Las rutas `/protegido` y `/prueba/*` son de prueba y se eliminarán cuando existan las páginas reales. Todavía no hay una pantalla que liste los ítems de un presupuesto. Las rutas de administración usan `requireRoles(UserRole.ADMIN)`.
+Las rutas `/protegido` y `/prueba/*` son de prueba y se eliminarán cuando existan las páginas reales. Las rutas de administración usan `requireRoles(UserRole.ADMIN)`.
