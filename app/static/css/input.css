@@ -60,7 +60,8 @@
   .field {
     @apply rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm
       text-neutral-700 outline-none placeholder:text-neutral-400
-      focus:border-sefel-red focus:ring-2 focus:ring-sefel-red/20;
+      focus:border-sefel-red focus:ring-2 focus:ring-sefel-red/20
+      disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-neutral-500;
   }
   /* Flecha propia para <select>: WebKit/macOS dibuja la suya y se ve distinta */
   .select {
@@ -112,4 +113,13 @@
   .page-btn[aria-current="page"] {
     @apply border-sefel-red bg-sefel-red text-white hover:bg-sefel-red;
   }
+}
+
+/* ---------- Fila recién creada o editada (A.4) ---------- */
+@keyframes resaltar-fila {
+  from { background-color: #fef9c3; }
+  to   { background-color: transparent; }
+}
+.fila-nueva > td {
+  animation: resaltar-fila 3s ease-out;
 }

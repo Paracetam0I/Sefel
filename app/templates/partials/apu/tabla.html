@@ -26,7 +26,7 @@
 
         <tbody class="divide-y divide-gray-100">
             {% for apu in apus %}
-            <tr id="apu-{{ apu.id }}" class="{{ '' if apu.is_active else 'opacity-55' }} hover:bg-gray-50/70">
+            <tr id="apu-{{ apu.id }}" class="{{ '' if apu.is_active else 'opacity-55' }} {{ 'fila-nueva' if apu.id == resaltar_id else '' }} hover:bg-gray-50/70">
                 <td class="td whitespace-nowrap text-neutral-500">
                     {{ apu.code }}
                 </td>

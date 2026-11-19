@@ -8,17 +8,85 @@ También es el punto de entrada del ejecutable (build.spec). Antes de abrir la
 ventana prepara la base de datos (crea o migra) y, si no hay ningún ADMIN
 activo, crea el administrador inicial (app/core/inicializacion.py).
 """
+import base64
 import html
+import os
 import socket
 import sys
 import threading
 import time
+from pathlib import Path
 
 import uvicorn
 import webview
 
 HOST = "127.0.0.1"
+
+# pywebview (WebView2) cancela en silencio toda descarga si esto es False
+# (su valor por defecto): por eso el PDF no se descargaba en escritorio.
+# Los PDF se guardan con ApiEscritorio.guardarPdf (diálogo nativo + aviso);
+# esto queda como respaldo para cualquier otra descarga.
+webview.settings["ALLOW_DOWNLOADS"] = True
 ESPERA_MAXIMA_SEGUNDOS = 15
+
+
+def carpetaDescargas() -> Path:
+    """Carpeta Descargas del usuario (aunque esté redirigida, p. ej. a OneDrive)."""
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+        ) as clave:
+            ruta = Path(winreg.QueryValueEx(clave, "{374DE290-123F-4565-9164-39C4925E467B}")[0])
+            if ruta.is_dir():
+                return ruta
+    except (ImportError, OSError):
+        pass
+    ruta = Path.home() / "Downloads"
+    return ruta if ruta.is_dir() else Path.home()
+
+
+class ApiEscritorio:
+    """Funciones de Python que la página puede llamar en la ventana de escritorio
+    (window.pywebview.api.*). Solo existen dentro de la app de escritorio; en el
+    navegador la página usa la descarga normal."""
+
+    def guardarPdf(self, nombre: str, contenido_base64: str) -> dict:
+        """Pide dónde guardar el PDF (diálogo nativo) y lo escribe.
+
+        Devuelve {"ok": True, "ruta": ...}, {"ok": False, "cancelado": True}
+        o {"ok": False, "error": ...}.
+        """
+        try:
+            nombre = os.path.basename(nombre) or "presupuesto.pdf"
+            if not nombre.lower().endswith(".pdf"):
+                nombre += ".pdf"
+            contenido = base64.b64decode(contenido_base64, validate=True)
+            if not contenido.startswith(b"%PDF-"):
+                return {"ok": False, "error": "El archivo recibido no es un PDF."}
+
+            ventana = webview.windows[0] if webview.windows else None
+            if ventana is None:
+                return {"ok": False, "error": "No hay una ventana abierta."}
+            eleccion = ventana.create_file_dialog(
+                webview.FileDialog.SAVE,
+                directory=str(carpetaDescargas()),
+                save_filename=nombre,
+                file_types=("Documento PDF (*.pdf)",),
+            )
+            if not eleccion:
+                return {"ok": False, "cancelado": True}
+
+            ruta = Path(eleccion if isinstance(eleccion, str) else eleccion[0])
+            if ruta.suffix.lower() != ".pdf":
+                ruta = ruta.with_suffix(".pdf")
+            ruta.write_bytes(contenido)
+            return {"ok": True, "ruta": str(ruta)}
+        except Exception as exc:  # noqa: BLE001  el error se muestra en la página
+            avisar(f"No se pudo guardar el PDF: {exc}", error=True)
+            return {"ok": False, "error": str(exc)}
 
 
 def avisar(texto: str, error: bool = False) -> None:
@@ -111,7 +179,7 @@ def main(port: int | None = None, preparar: bool = True) -> None:
         avisar(f"El servidor no respondió en {ESPERA_MAXIMA_SEGUNDOS} s.", error=True)
 
     # Crea la ventana nativa apuntando al servidor local
-    webview.create_window("APU sefel", url)
+    webview.create_window("APU sefel", url, js_api=ApiEscritorio())
     webview.start()
 
 

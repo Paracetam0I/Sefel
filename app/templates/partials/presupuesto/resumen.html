@@ -1,0 +1,10 @@
+{% from "partials/ui.html" import stat_card %}
+{# Tarjetas de resumen. En respuestas HTMX llegan con hx-swap-oob para
+   actualizarse junto con el listado (crear, editar, cambiar estado). #}
+<section id="resumen-presupuestos" class="mt-8 grid grid-cols-2 gap-5 lg:grid-cols-4" aria-label="Resumen"
+         {% if resumen_oob %}hx-swap-oob="true"{% endif %}>
+    {{ stat_card("Presupuestos totales", resumen.registrados, resumen.registrados_detalle) }}
+    {{ stat_card("En borrador",         resumen.borradores,  resumen.borradores_detalle) }}
+    {{ stat_card("Activos",             resumen.activos,     resumen.activos_detalle) }}
+    {{ stat_card("Cerrados",            resumen.cerrados,    resumen.cerrados_detalle) }}
+</section>

@@ -5,6 +5,8 @@ from sqlalchemy import CheckConstraint, Index, column, func
 from sqlmodel import Field, SQLModel, Relationship
 from pydantic import field_validator
 
+from app.core.validaciones import validarTexto
+
 if TYPE_CHECKING:
     from app.models.detalle_presupuesto import DetallePresupuesto
 
@@ -24,7 +26,7 @@ class APUValidacion(SQLModel):
         valor = valor.strip()
         if not valor:
             raise ValueError("El código es obligatorio.")
-        return valor
+        return validarTexto(valor, "El código")
 
     @field_validator("name")
     @classmethod
@@ -32,7 +34,7 @@ class APUValidacion(SQLModel):
         valor = valor.strip()
         if not valor:
             raise ValueError("El nombre es obligatorio.")
-        return valor
+        return validarTexto(valor, "El nombre")
 
     @field_validator("unit")
     @classmethod
@@ -42,7 +44,14 @@ class APUValidacion(SQLModel):
             raise ValueError("La unidad es obligatoria.")
         return valor
 
-    @field_validator("category", "description")
+    @field_validator("category")
+    @classmethod
+    def validar_categoria(cls, valor: str | None) -> str | None:
+        if valor is None or not valor.strip():
+            return None
+        return validarTexto(valor, "La categoría")
+
+    @field_validator("description")
     @classmethod
     def limpiar_opcionales(cls, valor: str | None) -> str | None:
         return valor.strip() or None if valor is not None else None

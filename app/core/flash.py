@@ -15,3 +15,47 @@ def getFlashedMessages(context, with_categories: bool = False):
     if with_categories:
         return mensajes
     return [mensaje for _, mensaje in mensajes]
+
+
+# Notificaciones inmediatas en respuestas HTMX
+# ==========================================
+# Una respuesta HTMX no recarga la página, así que el parcial de flash nunca se
+# pinta y el mensaje quedaba esperando a la siguiente página completa. Este
+# middleware saca los mensajes pendientes de la sesión y los manda en la misma
+# respuesta (cabecera HX-Trigger, evento "notificar"); base.html los muestra
+# como toast en la vista actual.
+
+import json
+
+from starlette.middleware.base import BaseHTTPMiddleware
+
+EVENTO_NOTIFICAR = "notificar"
+
+
+def agregarEvento(respuesta, evento: str, detalle) -> None:
+    """Suma un evento a HX-Trigger sin pisar los que ya traiga (p. ej. cerrar un modal)."""
+    actual = respuesta.headers.get("HX-Trigger")
+    eventos: dict = {}
+    if actual:
+        try:
+            eventos = json.loads(actual)
+        except ValueError:
+            # Formato simple: "evento1, evento2"
+            eventos = {nombre.strip(): None for nombre in actual.split(",") if nombre.strip()}
+    eventos[evento] = detalle
+    # ensure_ascii: las cabeceras HTTP no admiten tildes sin escapar
+    respuesta.headers["HX-Trigger"] = json.dumps(eventos, ensure_ascii=True)
+
+
+class NotificacionesHtmx(BaseHTTPMiddleware):
+    """Debe registrarse DENTRO de SessionMiddleware (antes en el código), para que
+    al vaciar la cola la sesión todavía no se haya escrito en la cookie."""
+
+    async def dispatch(self, request, call_next):
+        respuesta = await call_next(request)
+        if request.headers.get("HX-Request") != "true" or "session" not in request.scope:
+            return respuesta
+        mensajes = request.session.pop("_flashes", None)
+        if mensajes:
+            agregarEvento(respuesta, EVENTO_NOTIFICAR, {"mensajes": mensajes})
+        return respuesta

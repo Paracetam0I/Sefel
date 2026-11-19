@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from app.core.calculos import recalcularPresupuesto, totalesPorCategoria
 from app.core.db import getSession
 from app.core.pdf_presupuesto import generarPdfPresupuesto, nombreArchivo
+from app.core.validaciones import mensajeDe
 from app.core.dependencies import CurrentUser, requireRoles
 from app.core.permisos import (
     ROLES_PRESUPUESTOS_LECTURA,
@@ -159,11 +160,14 @@ def _validar(datos: dict) -> tuple[dict, str | None]:
 
         nombres = {
             "code": ("El código", 50),
-            "client_name": ("El nombre del cliente", 50),
-            "description": ("La descripción", 500),
+            "client_name": ("El cliente", 50),
+            "description": ("El nombre", 500),   # en pantalla, description = "Nombre"
         }
 
-        if campo == "estimate_income":
+        if mensajeDe(error):
+            # Regla de app/core/validaciones.py (texto o fechas): mensaje definitivo
+            mensaje = mensajeDe(error)
+        elif campo == "estimate_income":
             if tipo == "int_parsing":
                 mensaje = "El ingreso estimado debe ser un número entero."
             else:
@@ -267,14 +271,25 @@ def _renderLista(
     estado: str = "",
     pagina: int = 1,
     es_htmx: bool = False,
+    resaltar_id: int | None = None,
 ):
+    # Lo más reciente primero: un presupuesto recién creado aparece arriba
     todos = session.exec(
-        select(Presupuesto).order_by(Presupuesto.code)
+        select(Presupuesto).order_by(
+            Presupuesto.created_at.desc(), Presupuesto.id_presupuesto.desc()
+        )
     ).all()
     filtrados = _filtrar(todos, q, estado)
 
     total = len(filtrados)
     paginas = max(1, ceil(total / PRESUPUESTOS_POR_PAGINA))
+    if resaltar_id is not None:
+        # Muestra la página donde quedó el registro creado/editado
+        posicion = next(
+            (i for i, p in enumerate(filtrados) if p.id_presupuesto == resaltar_id), None
+        )
+        if posicion is not None:
+            pagina = posicion // PRESUPUESTOS_POR_PAGINA + 1
     pagina = min(max(pagina, 1), paginas)
 
     inicio = (pagina - 1) * PRESUPUESTOS_POR_PAGINA
@@ -309,6 +324,9 @@ def _renderLista(
             "pagina": pagina,
             "paginas": paginas,
             "base_url": base_url,
+            "resaltar_id": resaltar_id,
+            # En respuestas HTMX las tarjetas de resumen viajan fuera de banda
+            "resumen_oob": es_htmx,
         },
     )
 
@@ -444,11 +462,13 @@ def crear(
 
     if es_htmx:
         respuesta = _renderLista(
-            request, usuario, session, es_htmx=True,
+            request, usuario, session, es_htmx=True, resaltar_id=nuevo.id_presupuesto,
         )
         respuesta.headers["HX-Retarget"] = "#contenido-presupuesto"
         respuesta.headers["HX-Reswap"] = "innerHTML"
-        respuesta.headers["HX-Trigger"] = "cerrar-modal-presupuesto"
+        # Cerrar el modal DESPUÉS del swap: si se cierra antes, vacía el formulario
+        # que hizo la petición y HTMX descarta el reemplazo del listado
+        respuesta.headers["HX-Trigger-After-Settle"] = "cerrar-modal-presupuesto"
         return respuesta
 
     return RedirectResponse(LISTA_URL, status_code=303)
@@ -540,11 +560,13 @@ def actualizar(
 
     if es_htmx:
         respuesta = _renderLista(
-            request, usuario, session, es_htmx=True,
+            request, usuario, session, es_htmx=True, resaltar_id=presupuesto.id_presupuesto,
         )
         respuesta.headers["HX-Retarget"] = "#contenido-presupuesto"
         respuesta.headers["HX-Reswap"] = "innerHTML"
-        respuesta.headers["HX-Trigger"] = "cerrar-modal-presupuesto"
+        # Cerrar el modal DESPUÉS del swap: si se cierra antes, vacía el formulario
+        # que hizo la petición y HTMX descarta el reemplazo del listado
+        respuesta.headers["HX-Trigger-After-Settle"] = "cerrar-modal-presupuesto"
         return respuesta
 
     return RedirectResponse(LISTA_URL, status_code=303)

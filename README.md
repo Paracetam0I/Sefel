@@ -163,8 +163,26 @@ Se recalculan en `app/core/calculos.py` cada vez que cambia un ítem o un porcen
 
 Los porcentajes (0–100) y los montos fijos se editan con el botón **%** del listado, que también muestra los totales por categoría de APU.
 
+### Validaciones (creación y edición)
+Las reglas viven en `app/core/validaciones.py`: el backend las aplica siempre y los formularios usan los mismos patrones (`REGLAS_HTML`).
+
+| Campo | Regla |
+|---|---|
+| Código de APU y de presupuesto; nombre y categoría de APU | Letras (con tildes y ñ), números, espacios, `-` y `_` |
+| Cliente y Nombre del presupuesto | Lo anterior, más `.` y `,` (p. ej. "Constructora Andes Ltda.") |
+| Fecha de inicio | Obligatoria; no antes del 01/01/2026 |
+| Fecha de término | Obligatoria; no antes del inicio ni después del 31/12/2500 |
+
+En pantalla, el campo `description` del presupuesto se llama **Nombre** (en la base de datos conserva su nombre).
+
+### Listados y notificaciones
+- Los listados de APU y Presupuestos muestran **lo más reciente primero**. Al crear o editar, la lista se actualiza en el acto, salta a la página del registro y lo resalta.
+- Los avisos ("APU creado correctamente.", etc.) aparecen **al instante** como notificaciones flotantes. El middleware `NotificacionesHtmx` (`app/core/flash.py`) los envía en la misma respuesta HTMX.
+
 ### Exportar a PDF
 El botón **Exportar** de Presupuestos abre un selector; el servidor genera la cotización con ReportLab (`app/core/pdf_presupuesto.py`) y la descarga como `presupuesto-<id>-<aaaa-mm-dd>.pdf`. Los ítems muestran el costo real (la base de los porcentajes). Los datos de la empresa se configuran en `DATOS_EMPRESA` (`app/core/config.py`).
+
+En la **app de escritorio** (pywebview), la descarga del navegador no funciona: WebView2 cancela las descargas si no se habilitan. Por eso el botón pide el PDF al servidor y `client.py` (`ApiEscritorio.guardarPdf`) abre el diálogo nativo de guardado en la carpeta Descargas y avisa "PDF guardado en …" o "No se pudo guardar el PDF". En el navegador se descarga como siempre.
 
 ### Seguridad
 - **Inactividad:** la sesión se cierra tras 30 min sin actividad (`INACTIVIDAD_MAXIMA_SEGUNDOS`). El backend lo valida en cada petición y el front cierra la sesión y muestra *"Tu sesión se ha cerrado por inactividad."*.
@@ -206,12 +224,13 @@ python -m scripts.generate -d -y     # sin preguntar
 Usan SQLite en memoria (o archivos temporales): **no tocan** la base de datos real.
 
 ```powershell
-python -m pytest -v                                   # todas (103)
+python -m pytest -v                                   # todas (218)
 python -m pytest tests/test_auth.py -v                # login y roles
 python -m pytest tests/test_permisos_seguridad.py -v  # permisos, bloqueo e inactividad
 python -m pytest tests/test_costos_presupuesto.py -v  # costos, porcentajes y totales
 python -m pytest tests/test_exportar_pdf.py -v        # exportación a PDF
 python -m pytest tests/test_seeds_inicio.py -v        # seeds y script de inicio
+python -m pytest tests/test_correcciones_validaciones.py -v  # VIEWER, PDF escritorio, listados, avisos y validaciones
 ```
 
 Para revisar que `docs/rutas.md` coincide con las rutas reales: `python -m scripts.listar_rutas`.
@@ -251,6 +270,7 @@ app/
 │   ├── db.py               # Motor SQLite y sesión
 │   ├── dependencies.py     # Usuario actual, control de inactividad, requireRoles
 │   ├── permisos.py         # Roles por módulo
+│   ├── validaciones.py     # Reglas de texto y fechas (backend + patrones del front)
 │   ├── bloqueo.py          # Intentos fallidos y auditoría de cuentas
 │   ├── inicializacion.py   # Crear/migrar la BD y asegurar un ADMIN al arrancar
 │   ├── calculos.py         # Subtotales, porcentajes y totales

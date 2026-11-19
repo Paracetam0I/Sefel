@@ -39,7 +39,7 @@
         <thead class="border-y border-gray-100 bg-gray-50">
             <tr>
                 <th class="th">Código</th>
-                <th class="th">Presupuesto</th>
+                <th class="th">Nombre</th>
                 <th class="th">Cliente</th>
                 <th class="th">Creación</th>
                 <th class="th">Estado</th>
@@ -53,7 +53,7 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
             {% for p in presupuestos %}
-            <tr class="hover:bg-gray-50/70" id="presupuesto-{{ p.id_presupuesto }}">
+            <tr class="hover:bg-gray-50/70 {{ 'fila-nueva' if p.id_presupuesto == resaltar_id else '' }}" id="presupuesto-{{ p.id_presupuesto }}">
                 <td class="td whitespace-nowrap text-neutral-500">{{ p.code }}</td>
                 <td class="td font-bold text-sefel-black max-w-xs truncate"
                     title="{{ p.description }}">{{ p.description }}</td>
@@ -165,4 +165,9 @@
     </table>
 </div>
 
-{{ paginacion(pagina, presupuestos | length, total, pagina, paginas) }}
+<nav hx-boost="true" hx-target="#contenido-presupuesto" hx-swap="innerHTML">
+    {{ paginacion(desde, hasta, total, pagina, paginas, base_url) }}
+</nav>
+
+{# Respuesta HTMX: también actualiza las tarjetas de resumen (fuera de esta sección) #}
+{% if resumen_oob %}{% include "partials/presupuesto/resumen.html" %}{% endif %}

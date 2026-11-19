@@ -35,6 +35,97 @@
     </div>
 {% endblock body %}
 {% block scripts %}{% endblock scripts %}
+{# Notificaciones inmediatas (toasts). Llegan en la cabecera HX-Trigger de las
+   respuestas HTMX (evento "notificar", ver app/core/flash.py) o desde JS con
+   window.sefelNotificar(mensaje, categoria). #}
+<div id="toasts" class="pointer-events-none fixed right-6 top-20 z-[60] flex w-96 max-w-[calc(100vw-3rem)] flex-col gap-3"
+     aria-live="polite"></div>
+<script>
+(() => {
+    const ESTILOS = {
+        success: "bg-green-50 border-green-500 text-green-700",
+        error: "bg-red-50 border-sefel-red text-sefel-red",
+        warning: "bg-yellow-50 border-yellow-500 text-yellow-700",
+        info: "bg-blue-50 border-blue-500 text-blue-700",
+    };
+    const DURACION_MS = 6000;
+
+    function notificar(mensaje, categoria = "info") {
+        const contenedor = document.getElementById("toasts");
+        if (!contenedor || !mensaje) return;
+        const toast = document.createElement("div");
+        toast.setAttribute("role", categoria === "error" ? "alert" : "status");
+        toast.className = "toast pointer-events-auto flex items-start justify-between gap-4 rounded-r-lg border-l-4 px-4 py-3 text-sm shadow-lg "
+            + (ESTILOS[categoria] || ESTILOS.info);
+        const texto = document.createElement("span");
+        texto.textContent = mensaje;   // textContent: nunca interpreta HTML
+        const cerrar = document.createElement("button");
+        cerrar.type = "button";
+        cerrar.className = "font-bold leading-none";
+        cerrar.setAttribute("aria-label", "Cerrar");
+        cerrar.textContent = "×";
+        cerrar.addEventListener("click", () => toast.remove());
+        toast.append(texto, cerrar);
+        contenedor.append(toast);
+        setTimeout(() => toast.remove(), categoria === "error" ? DURACION_MS * 2 : DURACION_MS);
+    }
+
+    window.sefelNotificar = notificar;
+
+    // Descarga de archivos (PDF). En la app de escritorio (pywebview) la descarga
+    // del navegador no funciona: se pide el archivo al servidor y Python lo
+    // guarda con el diálogo nativo (client.py, ApiEscritorio.guardarPdf).
+    // En el navegador devuelve false y el enlace descarga como siempre.
+    function nombreDesde(respuesta, porDefecto) {
+        const cabecera = respuesta.headers.get("Content-Disposition") || "";
+        const encontrado = cabecera.match(/filename="?([^";]+)"?/i);
+        return encontrado ? encontrado[1] : porDefecto;
+    }
+
+    function aBase64(blob) {
+        return new Promise((resolver, rechazar) => {
+            const lector = new FileReader();
+            lector.onload = () => resolver(String(lector.result).split(",")[1]);
+            lector.onerror = () => rechazar(lector.error);
+            lector.readAsDataURL(blob);
+        });
+    }
+
+    window.sefelDescargarPdf = function (url) {
+        const api = window.pywebview && window.pywebview.api;
+        if (!api || typeof api.guardarPdf !== "function") {
+            notificar("Descargando el PDF…", "info");
+            return false;   // navegador: que siga el enlace normal
+        }
+        (async () => {
+            try {
+                const respuesta = await fetch(url);
+                const tipo = respuesta.headers.get("Content-Type") || "";
+                if (!respuesta.ok || !tipo.includes("application/pdf")) {
+                    throw new Error(respuesta.status === 404 ? "el presupuesto no existe" : "el servidor respondió " + respuesta.status);
+                }
+                const nombre = nombreDesde(respuesta, "presupuesto.pdf");
+                const resultado = await api.guardarPdf(nombre, await aBase64(await respuesta.blob()));
+                if (resultado && resultado.ok) {
+                    notificar("PDF guardado en " + resultado.ruta, "success");
+                } else if (resultado && resultado.cancelado) {
+                    notificar("Guardado cancelado.", "info");
+                } else {
+                    notificar("No se pudo guardar el PDF" + (resultado && resultado.error ? ": " + resultado.error : "."), "error");
+                }
+            } catch (error) {
+                notificar("No se pudo guardar el PDF: " + error.message, "error");
+            }
+        })();
+        return true;   // escritorio: se encarga Python
+    };
+    document.addEventListener("notificar", (evento) => {
+        for (const [categoria, mensaje] of (evento.detail && evento.detail.mensajes) || []) {
+            notificar(mensaje, categoria);
+        }
+    });
+})();
+</script>
 {% if usuario %}
 {# Cierre por inactividad (el backend también lo valida en cada petición).
    La última actividad se comparte entre pestañas con localStorage. #}
