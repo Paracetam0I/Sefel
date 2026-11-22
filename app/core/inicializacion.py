@@ -10,8 +10,11 @@ que no incluye la carpeta scripts/):
 """
 from __future__ import annotations
 
+import json
+import sqlite3
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import inspect
@@ -19,6 +22,7 @@ from sqlmodel import Session, SQLModel, select
 
 import app.models  # noqa: F401  registra todas las tablas en SQLModel.metadata
 from app.core.config import DATABASE_PATH
+from app.core.paths import userDataPath
 from app.core.db import engine
 from app.core.security import hashPassword
 from app.models.user import User, UserRole
@@ -32,6 +36,58 @@ def _raiz() -> Path:
 
 
 RAIZ = _raiz()
+
+# Registro de las bases ya creadas en este PC. Sirve para distinguir la primera
+# instalación (crear la base sin preguntar) de una base que existía y ya no está
+# (borrada o movida): en ese caso no se crea una vacía sin avisar.
+# Vive fuera de data/ para sobrevivir aunque se borre esa carpeta.
+REGISTRO_INSTALACION = userDataPath("instalacion.json")
+
+
+class BaseDatosFaltante(RuntimeError):
+    """La base de datos existía en esta ruta y ya no está."""
+
+    def __init__(self, ruta: Path) -> None:
+        self.ruta = ruta
+        super().__init__(
+            f"No se encontró la base de datos en {ruta}. "
+            "Ya existía antes en este PC: puede haberse borrado o movido."
+        )
+
+
+def _leerRegistro() -> dict:
+    try:
+        return json.loads(REGISTRO_INSTALACION.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def baseConocida(ruta: Path | None = None) -> bool:
+    """True si esta ruta ya tuvo una base de SEFEL creada en este PC."""
+    ruta = (ruta or DATABASE_PATH).resolve()
+    return str(ruta) in _leerRegistro().get("bases", {})
+
+
+def registrarBase(ruta: Path | None = None) -> None:
+    """Anota la ruta como base creada (no falla si no se puede escribir)."""
+    ruta = (ruta or DATABASE_PATH).resolve()
+    registro = _leerRegistro()
+    bases = registro.setdefault("bases", {})
+    if str(ruta) in bases:
+        return
+    bases[str(ruta)] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        REGISTRO_INSTALACION.parent.mkdir(parents=True, exist_ok=True)
+        REGISTRO_INSTALACION.write_text(json.dumps(registro, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def estadoBaseDatos() -> str:
+    """"existe", "nueva" (primera vez: se puede crear) o "falta" (existía y no está)."""
+    if DATABASE_PATH.exists():
+        return "existe"
+    return "falta" if baseConocida() else "nueva"
 ALEMBIC_INI = RAIZ / "alembic.ini"
 ALEMBIC_DIR = RAIZ / "alembic"
 
@@ -81,9 +137,27 @@ def _revisiones(config) -> tuple[str | None, str]:
     return actual, ScriptDirectory.from_config(config).get_current_head()
 
 
-def prepararBaseDatos() -> str:
-    """Crea o actualiza el esquema. Devuelve un resumen de lo que hizo."""
+def prepararBaseDatos(crear_si_falta: bool = False) -> str:
+    """Crea o actualiza el esquema. Devuelve un resumen de lo que hizo.
+
+    Si la base no existe y es la primera vez en esta ruta, la crea. Si ya había
+    existido (está en el registro), lanza BaseDatosFaltante, salvo que
+    `crear_si_falta` sea True (el usuario eligió crear una nueva).
+    """
     existia = DATABASE_PATH.exists()
+    if not existia:
+        if baseConocida() and not crear_si_falta:
+            raise BaseDatosFaltante(DATABASE_PATH)
+        # El motor de la app nunca crea el archivo (mode=rw): se crea aquí
+        DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        sqlite3.connect(DATABASE_PATH).close()
+
+    resumen = _prepararEsquema(existia)
+    registrarBase()
+    return resumen
+
+
+def _prepararEsquema(existia: bool) -> str:
     tablas = set(inspect(engine).get_table_names())
     migraciones = hayMigraciones()
 
@@ -178,12 +252,14 @@ def asegurarAdmin(usuarios: list[UsuarioInicial] | None = None) -> str:
     return f"creados los usuarios iniciales ({', '.join(creados)}); entra con '{admin.username}'"
 
 
-def inicializar(usuarios: list[UsuarioInicial] | None = None) -> list[str]:
+def inicializar(
+    usuarios: list[UsuarioInicial] | None = None, crear_si_falta: bool = False
+) -> list[str]:
     """Prepara BD y administrador. Devuelve las líneas de resumen.
 
     Lanza RuntimeError si después de preparar siguen faltando tablas.
     """
-    lineas = [f"Base de datos: {DATABASE_PATH}", f"  -> {prepararBaseDatos()}"]
+    lineas = [f"Base de datos: {DATABASE_PATH}", f"  -> {prepararBaseDatos(crear_si_falta)}"]
     faltantes = verificarTablas()
     if faltantes:
         raise RuntimeError(f"Faltan tablas en la base de datos: {faltantes}")

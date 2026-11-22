@@ -16,6 +16,7 @@ Uso:
     python -m scripts.iniciar --demo           # además, datos de ejemplo
     python -m scripts.iniciar --solo-servidor  # sin ventana: abrir la URL en el navegador
     python -m scripts.iniciar --solo-verificar # prepara todo y termina
+    python -m scripts.iniciar --red            # compartir en la red local (puerto 8765)
 """
 
 from __future__ import annotations
@@ -26,8 +27,26 @@ import sys
 from app.core import inicializacion
 
 
-def prepararBaseDatos() -> str:
-    return inicializacion.prepararBaseDatos()
+def prepararBaseDatos(crear_si_falta: bool = False) -> str:
+    """Como inicializacion.prepararBaseDatos, pero si falta una base que ya
+    existía pregunta en la consola (o usa --crear-bd) antes de crear una nueva."""
+    try:
+        return inicializacion.prepararBaseDatos(crear_si_falta)
+    except inicializacion.BaseDatosFaltante as faltante:
+        print(f"  ATENCIÓN: {faltante}", file=sys.stderr)
+        if not sys.stdin or not sys.stdin.isatty():
+            raise SystemExit(
+                "  No se creó una base nueva. Restaura el archivo, o vuelve a ejecutar "
+                "con --crear-bd para crear una vacía."
+            )
+        try:
+            respuesta = input("  ¿Crear una base de datos NUEVA y vacía? [s/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            respuesta = ""   # sin respuesta = No
+            print()
+        if respuesta not in {"s", "si", "sí", "y", "yes"}:
+            raise SystemExit("  Cancelado: no se creó una base nueva.")
+        return inicializacion.prepararBaseDatos(crear_si_falta=True)
 
 
 def verificarTablas() -> list[str]:
@@ -52,6 +71,11 @@ def parsearArgumentos(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Levanta solo el servidor (sin ventana de escritorio).")
     parser.add_argument("--solo-verificar", action="store_true",
                         help="Prepara BD y usuarios, y termina sin abrir la app.")
+    parser.add_argument("--crear-bd", action="store_true",
+                        help="Si falta una base que ya existía, crear una nueva sin preguntar.")
+    parser.add_argument("--red", action="store_true",
+                        help="Compartir en la red local: otros PCs entran por navegador "
+                             "(puerto 8765 si no se indica --puerto).")
     return parser.parse_args(argv)
 
 
@@ -72,7 +96,16 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 60)
 
     print(f"Base de datos: {inicializacion.DATABASE_PATH}")
-    print(f"  -> {prepararBaseDatos()}")
+    try:
+        print(f"  -> {prepararBaseDatos(args.crear_bd)}")
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        from app.core.errores_bd import esErrorBD, mensajeErrorBD
+        if not esErrorBD(exc):
+            raise
+        print(f"  ERROR: {mensajeErrorBD(exc)}", file=sys.stderr)
+        return 1
     faltantes = verificarTablas()
     if faltantes:
         print(f"  ERROR: faltan tablas: {faltantes}", file=sys.stderr)
@@ -90,21 +123,25 @@ def main(argv: list[str] | None = None) -> int:
 
     import client
 
-    puerto = args.puerto or client.getUnusedPort()
-    if not client.puertoDisponible(puerto):
+    host = client.HOST_RED if args.red else client.HOST
+    puerto = args.puerto or (client.PUERTO_RED if args.red else client.getUnusedPort())
+    if not client.puertoDisponible(puerto, host):
         print(f"ERROR: el puerto {puerto} está ocupado. Usa otro con --puerto.", file=sys.stderr)
         return 1
 
     print(f"Puerto: {puerto}  ->  http://{client.HOST}:{puerto}")
+    if args.red:
+        print(client.avisoRed(puerto))
     print("=" * 60, flush=True)
 
     if args.solo_servidor:
         import uvicorn
         from app.main import app
 
-        uvicorn.run(app, host=client.HOST, port=puerto)
+        uvicorn.run(app, host=host, port=puerto)
     else:
-        client.main(puerto, preparar=False)   # la BD ya quedó lista arriba
+        # la BD ya quedó lista arriba
+        client.main(puerto, preparar=False, red=args.red)
     return 0
 
 

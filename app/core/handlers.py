@@ -3,8 +3,13 @@ from urllib.parse import quote
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import DBAPIError
 
+from app.core.config import DATABASE_PATH
 from app.core.dependencies import MOTIVO_INACTIVIDAD, LoginRequired, RoleForbidden
+from app.core.errores_bd import describirErrorBD, mensajeErrorBD
+from app.core.flash import EVENTO_NOTIFICAR, agregarEvento
+from app.core.logging import configuracionLogging
 
 
 LOGIN_URL = "/login"
@@ -57,4 +62,34 @@ def registerAuthHandlers(app: FastAPI, templates: Jinja2Templates) -> None:
             name="errors/403.html",
             context={"usuario": exc.user},
             status_code=403,
+        )
+
+    @app.exception_handler(DBAPIError)
+    async def _on_error_base_datos(request: Request, exc: DBAPIError):
+        """Base no encontrada, dañada, bloqueada o sin permisos durante la ejecución.
+
+        Se responde 503 con un mensaje claro (y la ruta de la base) en lugar del
+        "Algo salió mal" genérico. El detalle técnico queda en el log.
+        """
+        configuracionLogging().error(
+            "Error de base de datos en %s %s (%s): %s",
+            request.method, request.url.path, DATABASE_PATH, exc,
+        )
+        mensaje = mensajeErrorBD(exc)
+
+        if esHtmx(request):
+            # Sin swap; el aviso aparece como notificación en la vista actual
+            respuesta = Response(status_code=503, headers={"HX-Reswap": "none"})
+            agregarEvento(respuesta, EVENTO_NOTIFICAR, {"mensajes": [["error", mensaje]]})
+            return respuesta
+
+        if esApi(request):
+            return JSONResponse({"detail": mensaje}, status_code=503)
+
+        titulo, accion = describirErrorBD(exc)
+        return templates.TemplateResponse(
+            request=request,
+            name="errors/base_datos.html",
+            context={"titulo": titulo, "accion": accion, "ruta": str(DATABASE_PATH)},
+            status_code=503,
         )

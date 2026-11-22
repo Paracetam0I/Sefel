@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from sqlmodel import Session, SQLModel, select
 
-from app.core.db import engine
+from app.core.db import crearArchivoBD, engine
 from app.models.user import User, UserRole, Presupuesto, StatusPresupuestos
 from app.models.detalle_presupuesto import DetallePresupuesto
 from app.core.inicializacion import ADMIN_INICIAL, UsuarioInicial
@@ -95,6 +95,7 @@ def upsert_user(session: Session, data: UserSeed, *, update_password: bool = Fal
 def run(*, create_tables: bool = False, update_passwords: bool = False) -> None:
     if create_tables:
         print("Creando tablas...")
+        crearArchivoBD()   # el motor no crea el archivo (mode=rw)
         SQLModel.metadata.create_all(engine)
 
     print("Sembrando usuarios...")

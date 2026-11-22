@@ -55,6 +55,14 @@ def validarTexto(valor: str, etiqueta: str, *, puntuacion: bool = False) -> str:
     return valor
 
 
+def validarCodigo(valor: str) -> str:
+    """Códigos de APU y presupuestos: mismas reglas de texto y siempre en MAYÚSCULAS.
+
+    Se guarda en mayúsculas sin importar cómo se escriba ("pre-01" -> "PRE-01").
+    """
+    return validarTexto(valor, "El código").upper()
+
+
 def _comoFecha(valor: date | datetime) -> date:
     return valor.date() if isinstance(valor, datetime) else valor
 

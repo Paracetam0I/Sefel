@@ -2,6 +2,7 @@
 
 Uso directo:          python client.py            (puerto libre al azar)
 Con puerto concreto:  python client.py 8765
+Modo red (compartido): python client.py --red     (otros PCs entran por navegador)
 Recomendado:          python -m scripts.iniciar   (además ofrece --demo, etc.)
 
 También es el punto de entrada del ejecutable (build.spec). Antes de abrir la
@@ -21,6 +22,12 @@ import uvicorn
 import webview
 
 HOST = "127.0.0.1"
+
+# Modo red: el servidor escucha en todas las interfaces para que otros PCs de
+# la red local entren con el navegador a http://<IP de este PC>:<puerto>.
+# Puerto fijo (los demás tienen que conocerlo); se cambia con --puerto.
+HOST_RED = "0.0.0.0"
+PUERTO_RED = 8765
 
 # pywebview (WebView2) cancela en silencio toda descarga si esto es False
 # (su valor por defecto): por eso el PDF no se descargaba en escritorio.
@@ -103,10 +110,50 @@ def getUnusedPort() -> int:
         return sock.getsockname()[1]
 
 
-def puertoDisponible(port: int) -> bool:
+def ipsLocales() -> list[str]:
+    """IPv4 de este PC en la red local (las que deben usar los otros PCs)."""
+    ips: list[str] = []
+    try:
+        # "Conectar" un socket UDP no envía nada, pero revela la IP de la
+        # interfaz de red que se usaría
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("10.255.255.255", 1))
+            ips.append(sock.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for *_, direccion in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.append(direccion[0])
+    except OSError:
+        pass
+    vistas: list[str] = []
+    for ip in ips:
+        if ip not in vistas and not ip.startswith(("127.", "169.254.")):
+            vistas.append(ip)
+    return vistas
+
+
+def avisoRed(port: int) -> str:
+    """Texto con las direcciones que deben usar los otros PCs."""
+    ips = ipsLocales()
+    if not ips:
+        return "Modo red: no se detectó una IP de red local en este PC."
+    # La primera es la de la interfaz que usa la red; el resto suelen ser
+    # adaptadores virtuales (VirtualBox, Hyper-V, VPN...)
+    texto = (
+        "Modo red: los demás usuarios entran desde su navegador a:\n"
+        f"   http://{ips[0]}:{port}"
+    )
+    if len(ips) > 1:
+        otras = ", ".join(ips[1:])
+        texto += f"\n   (otras interfaces de este PC, si la anterior no funciona: {otras})"
+    return texto + "\nSi no conectan, permite el puerto en el Firewall de Windows de este PC."
+
+
+def puertoDisponible(port: int, host: str = HOST) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
-            sock.bind((HOST, port))
+            sock.bind((host, port))
             return True
         except OSError:
             return False
@@ -139,38 +186,78 @@ def mostrarError(mensaje: str) -> None:
     webview.start()
 
 
-def prepararDatos() -> bool:
-    """Crea/migra la BD y asegura un ADMIN. Devuelve False si falló."""
-    try:
-        from app.core.inicializacion import inicializar
+def preguntarSiNo(titulo: str, mensaje: str) -> bool:
+    """Pregunta Sí/No con un cuadro nativo de Windows (antes de abrir la ventana).
 
-        for linea in inicializar():
+    Fuera de Windows (o si falla) responde No: nunca crea una base sin confirmación.
+    """
+    try:
+        import ctypes
+
+        MB_YESNO, MB_ICONWARNING, MB_DEFBUTTON2, IDYES = 0x04, 0x30, 0x100, 6
+        respuesta = ctypes.windll.user32.MessageBoxW(
+            None, mensaje, titulo, MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2
+        )
+        return respuesta == IDYES
+    except (AttributeError, OSError):
+        return False
+
+
+def prepararDatos() -> bool:
+    """Crea/migra la BD y asegura un ADMIN. Devuelve False si falló o se canceló."""
+    from app.core.errores_bd import esErrorBD, mensajeErrorBD
+    from app.core.inicializacion import BaseDatosFaltante, inicializar
+
+    try:
+        try:
+            lineas = inicializar()
+        except BaseDatosFaltante as faltante:
+            avisar(str(faltante), error=True)
+            crear = preguntarSiNo(
+                "SEFEL - base de datos no encontrada",
+                f"No se encontró la base de datos en:\n{faltante.ruta}\n\n"
+                "Ya existía antes en este PC: puede haberse borrado o movido.\n\n"
+                "¿Crear una base de datos NUEVA y vacía?\n\n"
+                "Sí: se crea una base vacía (con el usuario admin).\n"
+                "No: SEFEL se cierra para que puedas restaurar el archivo o un respaldo.",
+            )
+            if not crear:
+                avisar("Inicio cancelado: no se creó una base nueva.", error=True)
+                return False
+            lineas = inicializar(crear_si_falta=True)
+        for linea in lineas:
             avisar(linea)
         return True
     except Exception as exc:  # noqa: BLE001  cualquier fallo se muestra al usuario
         import traceback
 
         avisar(traceback.format_exc(), error=True)
-        mostrarError(f"{type(exc).__name__}: {exc}")
+        mostrarError(mensajeErrorBD(exc) if esErrorBD(exc) else f"{type(exc).__name__}: {exc}")
         return False
 
 
-def main(port: int | None = None, preparar: bool = True) -> None:
+def main(port: int | None = None, preparar: bool = True, red: bool = False) -> None:
     # Primero la BD: Alembic reconfigura el logging, así que va antes de cargar la app
     if preparar and not prepararDatos():
         return
 
     from app.main import app   # se importa aquí para que el lanzador cargue rápido
 
-    port = port or getUnusedPort()
-    url = f"http://{HOST}:{port}"
+    host = HOST_RED if red else HOST
+    port = port or (PUERTO_RED if red else getUnusedPort())
+    if not puertoDisponible(port, host):
+        mostrarError(f"El puerto {port} está ocupado. Cierra la otra aplicación o usa otro puerto.")
+        return
+    url = f"http://{HOST}:{port}"   # la ventana de este PC siempre usa localhost
     avisar(f"SEFEL escuchando en {url} (puerto {port})")
+    if red:
+        avisar(avisoRed(port))
 
     # Arranca FastAPI en un hilo daemon: se cierra junto con la ventana
     servidor = threading.Thread(
         target=uvicorn.run,
         args=(app,),
-        kwargs={"host": HOST, "port": port, "log_level": "error"},
+        kwargs={"host": host, "port": port, "log_level": "error"},
         daemon=True,
     )
     servidor.start()
@@ -183,5 +270,16 @@ def main(port: int | None = None, preparar: bool = True) -> None:
     webview.start()
 
 
+def parsearArgumentos(argv: list[str] | None = None):
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Abre SEFEL en una ventana de escritorio.")
+    parser.add_argument("puerto", nargs="?", type=int, help="Puerto (por defecto, uno libre).")
+    parser.add_argument("--red", action="store_true",
+                        help=f"Compartir en la red local (puerto {PUERTO_RED} por defecto).")
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else None)
+    argumentos = parsearArgumentos()
+    main(argumentos.puerto, red=argumentos.red)

@@ -7,7 +7,7 @@ from sqlalchemy.schema import Table, MetaData
 from sqlmodel import SQLModel
 
 # --- ENGINE: importar el tuyo, NO crear uno nuevo ---
-from app.core.db import engine
+from app.core.db import crearArchivoBD, engine
 
 # --- IMPORTAR TODOS LOS MODELOS (obligatorio para registrarlos en metadata) ---
 from app.models.apu import APU, APUValidacion
@@ -144,6 +144,9 @@ def confirm(prompt: str) -> bool:
 
 def main() -> int:
     args = parse_args()
+    # El motor no crea el archivo por su cuenta (mode=rw)
+    if crearArchivoBD():
+        print(f"Creado el archivo de base de datos: {engine.url.database}")
 
     if args.drop:
         scope = "TODAS las tablas (incluidas las ajenas a modelos)" if args.all else "las tablas de los modelos"

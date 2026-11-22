@@ -65,7 +65,10 @@ def verificarTablas() -> bool:
     """True si la base de datos ya tiene todas las tablas de los modelos."""
     import app.models  # noqa: F401  registra todos los modelos
 
-    return set(SQLModel.metadata.tables) <= set(inspect(engine).get_table_names())
+    try:
+        return set(SQLModel.metadata.tables) <= set(inspect(engine).get_table_names())
+    except Exception:  # noqa: BLE001  p. ej. el archivo de la base no existe
+        return False
 
 
 def sembrarApus(session: Session) -> int:

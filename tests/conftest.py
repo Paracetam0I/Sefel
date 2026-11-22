@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
@@ -8,6 +8,14 @@ from app.core.security import hashPassword
 from app.main import app
 from app.models.apu import APU
 from app.models.user import User, UserRole
+
+
+@pytest.fixture(autouse=True)
+def registro_instalacion_temporal(tmp_path, monkeypatch):
+    """Los tests nunca escriben en el instalacion.json real del usuario."""
+    from app.core import inicializacion
+
+    monkeypatch.setattr(inicializacion, "REGISTRO_INSTALACION", tmp_path / "instalacion.json")
 
 
 @pytest.fixture

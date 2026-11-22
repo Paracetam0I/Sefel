@@ -5,7 +5,7 @@ from sqlalchemy import CheckConstraint, Index, column, func
 from sqlmodel import Field, SQLModel, Relationship
 from pydantic import field_validator
 
-from app.core.validaciones import validarTexto
+from app.core.validaciones import validarCodigo, validarTexto
 
 if TYPE_CHECKING:
     from app.models.detalle_presupuesto import DetallePresupuesto
@@ -26,7 +26,7 @@ class APUValidacion(SQLModel):
         valor = valor.strip()
         if not valor:
             raise ValueError("El código es obligatorio.")
-        return validarTexto(valor, "El código")
+        return validarCodigo(valor)   # siempre en mayúsculas
 
     @field_validator("name")
     @classmethod

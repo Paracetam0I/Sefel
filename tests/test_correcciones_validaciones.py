@@ -357,7 +357,7 @@ def test_apu_acepta_tildes_enie_y_guiones(logged_in_client, session):
         headers=HTMX,
     )
     assert respuesta.headers.get("HX-Retarget") == "#contenido-apu"
-    assert session.exec(select(APU)).one().code == "ÑU_01-b"
+    assert session.exec(select(APU)).one().code == "ÑU_01-B"     # códigos siempre en mayúsculas
 
 
 def test_tildes_escritas_como_dos_caracteres_se_normalizan():

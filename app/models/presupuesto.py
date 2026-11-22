@@ -7,7 +7,12 @@ from pydantic import BaseModel, Field as CampoValidacion, NaiveDatetime, Validat
 from sqlalchemy import CheckConstraint, Column, Enum as SQLAlchemyEnum
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.core.validaciones import validarFechaInicio, validarFechaTermino, validarTexto
+from app.core.validaciones import (
+    validarCodigo,
+    validarFechaInicio,
+    validarFechaTermino,
+    validarTexto,
+)
 
 if TYPE_CHECKING:
     from app.models.detalle_presupuesto import DetallePresupuesto
@@ -155,7 +160,7 @@ class PresupuestoValidacion(BaseModel):
         if not v.strip():
             raise ValueError("campo vacío")
         if info.field_name == "code":
-            return validarTexto(v, "El código")
+            return validarCodigo(v)   # siempre en mayúsculas
         etiqueta = "El cliente" if info.field_name == "client_name" else "El nombre"
         return validarTexto(v, etiqueta, puntuacion=True)
 
