@@ -6,6 +6,7 @@ from app.core.flash import getFlashedMessages
 from app.core.formato import etiquetaRol, formatearClp, formatearFecha, iniciales
 from app.core.config import INACTIVIDAD_MAXIMA_SEGUNDOS
 from app.core.permisos import puede
+from app.core.validaciones import REGLAS_HTML
 
 def getBaseDir() -> str:
     # Si PyInstaller congeló la app, los recursos están en sys._MEIPASS
@@ -22,6 +23,7 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 templates.env.globals["get_flashed_messages"] = getFlashedMessages
 templates.env.globals["puede"] = puede
+templates.env.globals["REGLAS_HTML"] = REGLAS_HTML
 templates.env.globals["inactividad_ms"] = INACTIVIDAD_MAXIMA_SEGUNDOS * 1000
 templates.env.filters["clp"] = formatearClp
 templates.env.filters["fecha"] = formatearFecha

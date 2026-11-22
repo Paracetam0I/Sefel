@@ -66,6 +66,8 @@ Opciones:
 | `--demo` | Además siembra APU y presupuestos de ejemplo (no duplica si ya existen). |
 | `--solo-servidor` | Levanta solo el servidor, sin ventana: abre la URL mostrada en el navegador. |
 | `--solo-verificar` | Prepara base de datos y usuarios, y termina sin abrir la app. |
+| `--red` | **Comparte la app en la red local**: otros PCs entran con el navegador (puerto 8765 si no se indica `--puerto`). Ver [Varios usuarios a la vez](#varios-usuarios-a-la-vez-modo-red). |
+| `--crear-bd` | Si falta una base de datos que ya existía, crea una nueva sin preguntar. |
 
 Ejemplo de salida:
 ```text
@@ -83,10 +85,37 @@ Otras formas de arrancar:
 ```powershell
 python client.py            # ventana de escritorio, puerto libre (también prepara BD y admin)
 python client.py 8765       # ventana de escritorio, puerto fijo
+python client.py --red      # ventana de escritorio y, además, compartida en la red local
 uvicorn app.main:app --reload --port 8765   # desarrollo con recarga automática (sin verificaciones)
 ```
 
 > La preparación de la base de datos y del administrador vive en `app/core/inicializacion.py`, así que también la hacen `client.py` y el ejecutable. La diferencia: `scripts.iniciar` crea **los 4 usuarios de prueba**, mientras que `client.py`/el ejecutable crean **solo `admin`** (una instalación real no necesita cuentas de prueba).
+
+### Varios usuarios a la vez (modo red)
+Cada instalación es **independiente**: sin `--red`, el servidor solo atiende al propio PC y la base de datos vive en la carpeta de ese usuario. Instalar SEFEL en 4 PCs da 4 apps con **datos separados**.
+
+Para que varias personas trabajen **sobre los mismos datos**, un PC hace de servidor y los demás entran con el navegador:
+
+1. En el PC servidor: `python -m scripts.iniciar --red` (o `MiApp.exe --red`). Muestra la dirección para los demás, por ejemplo `http://192.168.1.88:8765`.
+2. La primera vez, Windows pregunta si se permite el acceso a la red: acepta en **redes privadas**. Si los demás no conectan, abre el puerto 8765 en el Firewall de Windows de ese PC.
+3. En los otros PCs: abrir esa dirección en el navegador (no hace falta instalar nada) y entrar con su usuario.
+
+Todos comparten la base del PC servidor; ese PC debe quedar encendido con SEFEL abierto. La conexión es HTTP sin cifrar: úsalo solo en la red local de la oficina.
+
+> No pongas la base en una carpeta de red compartida para abrirla desde varios PCs: SQLite puede dañarse con escrituras simultáneas por red y el modo WAL no funciona ahí. Usa el modo red.
+
+### Capacidad
+Medido con usuarios virtuales que trabajan **sin pausa** (listar, filtrar, crear APU y presupuestos, agregar ítems, guardar porcentajes, exportar PDF), contra una sola instancia:
+
+| Usuarios simultáneos | Peticiones por segundo | Errores | Tiempo típico (mediana) |
+|---|---|---|---|
+| 4 | 78 | 0 | 0,02–0,12 s |
+| 20 | 72 | 0 | 0,2–0,3 s |
+| 50 | 69 | 0 | 0,4–0,8 s |
+
+Una persona real hace una acción cada pocos segundos, así que **4 usuarios simultáneos están muy por debajo del límite**; una oficina de decenas de usuarios también cabe. Lo que más influye es el **volumen de datos**: los listados cargan todos los registros y se vuelven más lentos con miles de APU o presupuestos.
+
+Para soportar escrituras simultáneas, la base usa el modo **WAL** de SQLite y espera hasta 15 s si otra escritura la tiene ocupada (`app/core/db.py`). Antes de este ajuste aparecían errores `database is locked` desde unos 20 usuarios.
 
 ## 4. Usuarios de prueba
 Los crea `scripts/seed_admin.py` (automáticamente desde `scripts.iniciar` si no hay ningún ADMIN, o a mano con `python -m scripts.seed_admin`).
@@ -122,6 +151,8 @@ En la carpeta de datos del usuario: `%LOCALAPPDATA%\inacap\APU sefel\`
 | Archivo | Contenido |
 |---|---|
 | `data\sefel.db` | Base de datos SQLite |
+| `data\sefel.db-wal`, `data\sefel.db-shm` | Parte de la base (modo WAL). Respáldalos junto a `sefel.db`, con SEFEL cerrado |
+| `instalacion.json` | Registro de las bases ya creadas en este PC (para detectar una base que desapareció) |
 | `logs\sefel.log` | Registro de la aplicación (rotativo) |
 | `secret_key.txt` | Clave de firma de las sesiones (si no hay `SECRET_KEY` en el entorno) |
 
@@ -130,6 +161,17 @@ Para usar **otra base de datos** (pruebas, demos) sin tocar la tuya, define `SEF
 $env:SEFEL_DB_PATH = "C:\temp\sefel-demo.db"
 python -m scripts.iniciar --demo
 ```
+
+### Si la base de datos no está o falla
+| Situación | Qué hace SEFEL |
+|---|---|
+| Primera vez en este PC | Crea la base y el usuario `admin` sin preguntar. |
+| Al abrir, falta una base que **ya existía** (borrada o movida) | **No** crea una vacía sin avisar. La ventana pregunta: *Sí* crea una nueva vacía, *No* cierra SEFEL para restaurar el archivo o un respaldo. `scripts.iniciar` pregunta en la consola o usa `--crear-bd`. |
+| Al abrir, la base está dañada, bloqueada o sin permisos | Ventana de error con la causa, qué hacer y la ruta de la base. |
+| Con SEFEL abierto | Windows bloquea el archivo: no se puede borrar ni mover mientras la app lo usa. |
+| Durante el uso, la base deja de estar disponible (p. ej. un disco que se desconecta) | La app **no** crea una base vacía: responde con un aviso claro (página, notificación o JSON 503) con la causa y la ruta. El detalle técnico queda en `logs\sefel.log`. |
+
+Las explicaciones de cada error están en `app/core/errores_bd.py`. Como la conexión de la app nunca crea el archivo, para crear la base usa `scripts.iniciar`, `client.py` o el ejecutable (`alembic upgrade head` ya no la crea si no existe).
 
 ## 7. Módulos y permisos
 Los roles por módulo están en `app/core/permisos.py` y se validan en el **backend**: un rol sin permiso recibe **403** aunque entre por URL. El front solo oculta lo que el rol no puede usar.
@@ -163,8 +205,27 @@ Se recalculan en `app/core/calculos.py` cada vez que cambia un ítem o un porcen
 
 Los porcentajes (0–100) y los montos fijos se editan con el botón **%** del listado, que también muestra los totales por categoría de APU.
 
+### Validaciones (creación y edición)
+Las reglas viven en `app/core/validaciones.py`: el backend las aplica siempre y los formularios usan los mismos patrones (`REGLAS_HTML`).
+
+| Campo | Regla |
+|---|---|
+| Código de APU y de presupuesto | Letras (con tildes y ñ), números, espacios, `-` y `_`; se guarda **siempre en MAYÚSCULAS** (`pre-01` → `PRE-01`) |
+| Nombre y categoría de APU | Letras (con tildes y ñ), números, espacios, `-` y `_` |
+| Cliente y Nombre del presupuesto | Lo anterior, más `.` y `,` (p. ej. "Constructora Andes Ltda.") |
+| Fecha de inicio | Obligatoria; no antes del 01/01/2026 |
+| Fecha de término | Obligatoria; no antes del inicio ni después del 31/12/2500 |
+
+En pantalla, el campo `description` del presupuesto se llama **Nombre** (en la base de datos conserva su nombre).
+
+### Listados y notificaciones
+- Los listados de APU y Presupuestos muestran **lo más reciente primero**. Al crear o editar, la lista se actualiza en el acto, salta a la página del registro y lo resalta.
+- Los avisos ("APU creado correctamente.", etc.) aparecen **al instante** como notificaciones flotantes. El middleware `NotificacionesHtmx` (`app/core/flash.py`) los envía en la misma respuesta HTMX.
+
 ### Exportar a PDF
 El botón **Exportar** de Presupuestos abre un selector; el servidor genera la cotización con ReportLab (`app/core/pdf_presupuesto.py`) y la descarga como `presupuesto-<id>-<aaaa-mm-dd>.pdf`. Los ítems muestran el costo real (la base de los porcentajes). Los datos de la empresa se configuran en `DATOS_EMPRESA` (`app/core/config.py`).
+
+En la **app de escritorio** (pywebview), la descarga del navegador no funciona: WebView2 cancela las descargas si no se habilitan. Por eso el botón pide el PDF al servidor y `client.py` (`ApiEscritorio.guardarPdf`) abre el diálogo nativo de guardado en la carpeta Descargas y avisa "PDF guardado en …" o "No se pudo guardar el PDF". En el navegador se descarga como siempre.
 
 ### Seguridad
 - **Inactividad:** la sesión se cierra tras 30 min sin actividad (`INACTIVIDAD_MAXIMA_SEGUNDOS`). El backend lo valida en cada petición y el front cierra la sesión y muestra *"Tu sesión se ha cerrado por inactividad."*.
@@ -206,12 +267,15 @@ python -m scripts.generate -d -y     # sin preguntar
 Usan SQLite en memoria (o archivos temporales): **no tocan** la base de datos real.
 
 ```powershell
-python -m pytest -v                                   # todas (103)
+python -m pytest -v                                   # todas (250)
 python -m pytest tests/test_auth.py -v                # login y roles
 python -m pytest tests/test_permisos_seguridad.py -v  # permisos, bloqueo e inactividad
 python -m pytest tests/test_costos_presupuesto.py -v  # costos, porcentajes y totales
 python -m pytest tests/test_exportar_pdf.py -v        # exportación a PDF
 python -m pytest tests/test_seeds_inicio.py -v        # seeds y script de inicio
+python -m pytest tests/test_correcciones_validaciones.py -v  # VIEWER, PDF escritorio, listados, avisos y validaciones
+python -m pytest tests/test_codigos_mayusculas.py -v  # códigos en mayúsculas
+python -m pytest tests/test_bd_red_errores.py -v      # base faltante/errores, WAL y modo red
 ```
 
 Para revisar que `docs/rutas.md` coincide con las rutas reales: `python -m scripts.listar_rutas`.
@@ -251,8 +315,10 @@ app/
 │   ├── db.py               # Motor SQLite y sesión
 │   ├── dependencies.py     # Usuario actual, control de inactividad, requireRoles
 │   ├── permisos.py         # Roles por módulo
+│   ├── validaciones.py     # Reglas de texto y fechas (backend + patrones del front)
 │   ├── bloqueo.py          # Intentos fallidos y auditoría de cuentas
-│   ├── inicializacion.py   # Crear/migrar la BD y asegurar un ADMIN al arrancar
+│   ├── inicializacion.py   # Crear/migrar la BD, detectar una base faltante y asegurar un ADMIN
+│   ├── errores_bd.py       # Explicación de cada error de base de datos
 │   ├── calculos.py         # Subtotales, porcentajes y totales
 │   ├── pdf_presupuesto.py  # Cotización en PDF (ReportLab)
 │   └── routers/            # admin, apu, items, presupuestos, dashboard

@@ -20,6 +20,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.logging import configuracionLogging
 from app.core.config import SECRET_KEY
+from app.core.flash import NotificacionesHtmx
 from app.core.handlers import MENSAJE_INACTIVIDAD, registerAuthHandlers
 from app.core.dependencies import CurrentUser, getCurrentUser
 from app.core.dependencies import MOTIVO_INACTIVIDAD, OptionalUser, marcarActividad
@@ -50,6 +51,10 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+# Se registra antes que SessionMiddleware para quedar DENTRO de ella: así vacía
+# la cola de mensajes antes de que la sesión se guarde en la cookie.
+app.add_middleware(NotificacionesHtmx)
 
 app.add_middleware(
     SessionMiddleware,

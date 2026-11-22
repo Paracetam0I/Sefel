@@ -13,6 +13,7 @@ from app.core.db import getSession
 from app.core.dependencies import CurrentUser, requireRoles
 from app.core.flash import flash
 from app.core.permisos import ROLES_APU
+from app.core.validaciones import mensajeDe
 from app.models.apu import APU, APUValidacion
 from app.templates import templates
 
@@ -138,7 +139,11 @@ def _validar(datos: dict) -> tuple[dict, str | None]:
             "category": ("La categoría", 100),
         }
 
-        if campo == "unit_cost":
+        if mensajeDe(error):
+            # Regla de app/core/validaciones.py: su mensaje ya es el definitivo
+            mensaje = mensajeDe(error)
+
+        elif campo == "unit_cost":
             if tipo == "int_parsing":
                 mensaje = "El precio unitario debe ser un número entero."
             else:
@@ -209,6 +214,16 @@ def _renderFormulario(
     )
 
 
+def _paginaDe(registros: list, registro_id: int | None, por_pagina: int) -> int | None:
+    """Página en la que queda un registro (para mostrar el recién creado/editado)."""
+    if registro_id is None:
+        return None
+    for posicion, registro in enumerate(registros):
+        if registro.id == registro_id:
+            return posicion // por_pagina + 1
+    return None
+
+
 def _renderLista(
     request: Request,
     usuario,
@@ -219,12 +234,17 @@ def _renderLista(
     estado: str = "",
     pagina: int = 1,
     es_htmx: bool = False,
+    resaltar_id: int | None = None,
 ):
-    todos = session.exec(select(APU).order_by(APU.code)).all()
+    # Lo más reciente primero: un APU recién creado aparece arriba de la página 1
+    todos = session.exec(
+        select(APU).order_by(APU.created_at.desc(), APU.id.desc())
+    ).all()
     filtrados = _filtrar(todos, q, categoria, estado)
 
     total = len(filtrados)
     paginas = max(1, ceil(total / APUS_POR_PAGINA))
+    pagina = _paginaDe(filtrados, resaltar_id, APUS_POR_PAGINA) or pagina
     pagina = min(max(pagina, 1), paginas)
 
     inicio = (pagina - 1) * APUS_POR_PAGINA
@@ -273,6 +293,7 @@ def _renderLista(
             "pagina": pagina,
             "paginas": paginas,
             "base_url": base_url,
+            "resaltar_id": resaltar_id,
         },
     )
 
@@ -381,10 +402,13 @@ def crear(
             usuario,
             session,
             es_htmx=True,
+            resaltar_id=nuevo.id,
         )
         respuesta.headers["HX-Retarget"] = "#contenido-apu"
         respuesta.headers["HX-Reswap"] = "innerHTML"
-        respuesta.headers["HX-Trigger"] = "cerrar-modal-apu"
+        # Cerrar el modal DESPUÉS del swap: si se cierra antes, vacía el formulario
+        # que hizo la petición y HTMX descarta el reemplazo del listado
+        respuesta.headers["HX-Trigger-After-Settle"] = "cerrar-modal-apu"
         return respuesta
 
     return RedirectResponse(LISTA_URL, status_code=303)
@@ -493,10 +517,13 @@ def actualizar(
             usuario,
             session,
             es_htmx=True,
+            resaltar_id=apu.id,
         )
         respuesta.headers["HX-Retarget"] = "#contenido-apu"
         respuesta.headers["HX-Reswap"] = "innerHTML"
-        respuesta.headers["HX-Trigger"] = "cerrar-modal-apu"
+        # Cerrar el modal DESPUÉS del swap: si se cierra antes, vacía el formulario
+        # que hizo la petición y HTMX descarta el reemplazo del listado
+        respuesta.headers["HX-Trigger-After-Settle"] = "cerrar-modal-apu"
         return respuesta
 
     return RedirectResponse(LISTA_URL, status_code=303)

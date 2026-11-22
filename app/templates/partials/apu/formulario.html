@@ -22,8 +22,10 @@
                 type="text"
                 value="{{ apu.code if apu else '' }}"
                 maxlength="50"
+                pattern="{{ REGLAS_HTML.texto.patron }}"
+                title="{{ REGLAS_HTML.texto.ayuda }}"
                 required
-                class="field w-full"
+                class="field w-full uppercase"
             >
         </div>
 
@@ -35,6 +37,8 @@
                 type="text"
                 value="{{ apu.name if apu else '' }}"
                 maxlength="150"
+                pattern="{{ REGLAS_HTML.texto.patron }}"
+                title="{{ REGLAS_HTML.texto.ayuda }}"
                 required
                 class="field w-full"
             >
@@ -62,6 +66,8 @@
                 type="text"
                 value="{{ apu.category if apu and apu.category else '' }}"
                 maxlength="100"
+                pattern="{{ REGLAS_HTML.texto.patron }}"
+                title="{{ REGLAS_HTML.texto.ayuda }}"
                 class="field w-full"
             >
         </div>

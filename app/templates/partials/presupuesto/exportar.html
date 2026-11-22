@@ -15,7 +15,7 @@
         <select id="presupuesto-exportar" x-model="id" class="field select w-full">
             {% for p in presupuestos %}
             <option value="{{ p.id_presupuesto }}">
-                {{ p.code }} · {{ p.client_name }} · {{ etiquetas.get(p.status.value, p.status.value) }} · {{ p.monto_total | clp }}
+                {{ p.code }} · {{ p.description }} · {{ p.client_name }} · {{ etiquetas.get(p.status.value, p.status.value) }} · {{ p.monto_total | clp }}
             </option>
             {% endfor %}
         </select>
@@ -32,7 +32,8 @@
         <a class="btn btn-primary"
            :href="'/presupuestos/' + id + '/pdf'"
            href="/presupuestos/{{ presupuestos[0].id_presupuesto }}/pdf"
-           @click="setTimeout(() => $dispatch('cerrar-modal-presupuesto'), 300)">
+           @click="if (window.sefelDescargarPdf($el.href)) $event.preventDefault();
+                   setTimeout(() => $dispatch('cerrar-modal-presupuesto'), 300)">
             Descargar PDF
         </a>
         {% endif %}

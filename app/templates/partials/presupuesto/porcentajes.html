@@ -79,14 +79,16 @@
         </div>
     </section>
 
-    {# 2) Formulario de porcentajes y montos fijos #}
+    {# 2) Porcentajes y montos fijos: formulario solo para roles de edición.
+         VIEWER los ve como texto (el backend igual responde 403 si intenta guardar). #}
+    {% if puede_editar %}
     <form method="post"
           action="/presupuestos/{{ presupuesto.id_presupuesto }}/porcentajes"
           hx-post="/presupuestos/{{ presupuesto.id_presupuesto }}/porcentajes"
           hx-target="{{ '#porcentajes-pagina' if pagina_completa else '#modal-presupuesto-body' }}"
           hx-swap="innerHTML">
         <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">Porcentajes de gastos</h3>
-        <fieldset class="grid grid-cols-1 gap-4 sm:grid-cols-3" {% if not puede_editar %}disabled{% endif %}>
+        <fieldset class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
                 <label for="pct_gastos_generales" class="label">Gastos generales (%)</label>
                 <input id="pct_gastos_generales" name="pct_gastos_generales" type="number"
@@ -121,14 +123,24 @@
             </div>
         </fieldset>
 
-        {% if puede_editar %}
         <div class="mt-4 flex justify-end">
             <button type="submit" class="btn btn-primary">Guardar y recalcular</button>
         </div>
-        {% else %}
-        <p class="mt-3 text-sm text-neutral-500">Tu rol solo permite consultar estos valores.</p>
-        {% endif %}
     </form>
+
+    {% else %}
+    <section aria-label="Porcentajes de gastos">
+        <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">Porcentajes de gastos</h3>
+        <dl class="grid grid-cols-1 gap-3 rounded-lg border border-gray-100 p-4 text-sm sm:grid-cols-3">
+            <div><dt class="text-neutral-500">Gastos generales</dt><dd class="font-semibold">{{ pct(presupuesto.pct_gastos_generales) }}%</dd></div>
+            <div><dt class="text-neutral-500">IVA</dt><dd class="font-semibold">{{ pct(presupuesto.pct_iva) }}%</dd></div>
+            <div><dt class="text-neutral-500">Utilidad</dt><dd class="font-semibold">{{ pct(presupuesto.pct_utilidad) }}%</dd></div>
+            <div><dt class="text-neutral-500">Costo directo fijo</dt><dd class="font-semibold">{{ presupuesto.costo_directo | clp if presupuesto.costo_directo else "No (usa el total real)" }}</dd></div>
+            <div><dt class="text-neutral-500">Costo neto fijo</dt><dd class="font-semibold">{{ presupuesto.costo_neto | clp if presupuesto.costo_neto else "No (usa el neto calculado)" }}</dd></div>
+        </dl>
+        <p class="mt-2 text-sm text-neutral-500">Tu rol solo permite consultar estos valores.</p>
+    </section>
+    {% endif %}
 
     {# 3) Montos calculados (valores guardados en el presupuesto) #}
     <section>

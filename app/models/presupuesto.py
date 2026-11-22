@@ -3,9 +3,16 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from pydantic import BaseModel, NaiveDatetime, field_validator
+from pydantic import BaseModel, Field as CampoValidacion, NaiveDatetime, ValidationInfo, field_validator
 from sqlalchemy import CheckConstraint, Column, Enum as SQLAlchemyEnum
 from sqlmodel import Field, Relationship, SQLModel
+
+from app.core.validaciones import (
+    validarCodigo,
+    validarFechaInicio,
+    validarFechaTermino,
+    validarTexto,
+)
 
 if TYPE_CHECKING:
     from app.models.detalle_presupuesto import DetallePresupuesto
@@ -136,20 +143,36 @@ class Presupuesto(SQLModel, table=True):
 
 
 class PresupuestoValidacion(BaseModel):
+    """Validación de creación y edición. En pantalla, `description` se llama "Nombre"."""
+
     code: str = Field(min_length=1, max_length=50)
     client_name: str = Field(min_length=1, max_length=50)
     estimate_income: int = Field(ge=0)
-    start_date: datetime | None = None
-    end_date: datetime | None = None
+    # Obligatorias: validate_default hace que falten también cuando no se envían
+    start_date: datetime | None = CampoValidacion(default=None, validate_default=True)
+    end_date: datetime | None = CampoValidacion(default=None, validate_default=True)
     description: str = Field(min_length=1, max_length=500)
     status: StatusPresupuestos = StatusPresupuestos.DRAFT
 
     @field_validator("code", "client_name", "description")
     @classmethod
-    def _no_vacio(cls, v: str) -> str:
+    def _no_vacio(cls, v: str, info: ValidationInfo) -> str:
         if not v.strip():
             raise ValueError("campo vacío")
-        return v.strip()
+        if info.field_name == "code":
+            return validarCodigo(v)   # siempre en mayúsculas
+        etiqueta = "El cliente" if info.field_name == "client_name" else "El nombre"
+        return validarTexto(v, etiqueta, puntuacion=True)
+
+    @field_validator("start_date")
+    @classmethod
+    def _inicio(cls, v: datetime | None) -> datetime:
+        return validarFechaInicio(v)
+
+    @field_validator("end_date")
+    @classmethod
+    def _termino(cls, v: datetime | None, info: ValidationInfo) -> datetime:
+        return validarFechaTermino(v, info.data.get("start_date"))
 
 
 class PorcentajesValidacion(BaseModel):

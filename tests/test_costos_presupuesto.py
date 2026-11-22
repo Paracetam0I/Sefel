@@ -1,4 +1,5 @@
 """Costos cotizado/real de APU e ítems, y porcentajes del presupuesto."""
+import json
 from datetime import datetime
 
 import pytest
@@ -190,7 +191,7 @@ def test_guardar_porcentajes_calcula_y_almacena_montos(
         headers={"HX-Request": "true"},
     )
     assert response.status_code == 200
-    assert response.headers["HX-Trigger"] == "recargar-presupuestos"
+    assert "recargar-presupuestos" in json.loads(response.headers["HX-Trigger"])
     assert "Obra gruesa" in response.text            # totales por categoría
     assert "$ 1.487.500" in response.text            # total con IVA
 

@@ -1,19 +1,26 @@
+{# Los errores vuelven a este modal; al guardar bien, el servidor redirige la
+   respuesta al listado con HX-Retarget. Reglas en app/core/validaciones.py #}
+{% set texto = REGLAS_HTML.texto %}
+{% set texto_p = REGLAS_HTML.texto_puntuacion %}
 <form hx-post="{{ '/presupuestos/' ~ presupuesto.id_presupuesto if modo == 'editar' else '/presupuestos' }}"
-      hx-target="#contenido-presupuesto" hx-swap="innerHTML"
+      hx-target="#modal-presupuesto-body" hx-swap="innerHTML"
+      x-data="{ inicio: '{{ presupuesto.start_date or '' }}' }"
       class="space-y-4">
 
     {% if error %}
-    <div class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ error }}</div>
+    <div class="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{{ error }}</div>
     {% endif %}
 
     <div class="grid grid-cols-2 gap-4">
         <label class="block">
             <span class="text-sm font-medium">Código</span>
-            <input name="code" value="{{ presupuesto.code }}" class="field w-full" required maxlength="50">
+            <input name="code" value="{{ presupuesto.code }}" class="field w-full uppercase" required maxlength="50"
+                   pattern="{{ texto.patron }}" title="{{ texto.ayuda }}">
         </label>
         <label class="block">
             <span class="text-sm font-medium">Cliente</span>
-            <input name="client_name" value="{{ presupuesto.client_name }}" class="field w-full" required maxlength="50">
+            <input name="client_name" value="{{ presupuesto.client_name }}" class="field w-full" required maxlength="50"
+                   pattern="{{ texto_p.patron }}" title="{{ texto_p.ayuda }}">
         </label>
         <label class="block">
             <span class="text-sm font-medium">Ingreso estimado</span>
@@ -31,17 +38,23 @@
         </label>
         <label class="block">
             <span class="text-sm font-medium">Inicio</span>
-            <input type="date" name="start_date" value="{{ presupuesto.start_date }}" class="field w-full">
+            <input type="date" name="start_date" value="{{ presupuesto.start_date }}" class="field w-full" required
+                   min="{{ REGLAS_HTML.fecha_min }}" max="{{ REGLAS_HTML.fecha_max }}" x-model="inicio">
         </label>
         <label class="block">
-            <span class="text-sm font-medium">Fin</span>
-            <input type="date" name="end_date" value="{{ presupuesto.end_date }}" class="field w-full">
+            <span class="text-sm font-medium">Término</span>
+            {# El término no puede ser anterior al inicio: su mínimo sigue a la fecha de inicio #}
+            <input type="date" name="end_date" value="{{ presupuesto.end_date }}" class="field w-full" required
+                   min="{{ REGLAS_HTML.fecha_min }}" :min="inicio || '{{ REGLAS_HTML.fecha_min }}'"
+                   max="{{ REGLAS_HTML.fecha_max }}">
         </label>
     </div>
 
     <label class="block">
-        <span class="text-sm font-medium">Descripción</span>
-        <textarea name="description" rows="3" class="field w-full" required maxlength="500">{{ presupuesto.description }}</textarea>
+        <span class="text-sm font-medium">Nombre</span>
+        {# En la BD el campo sigue siendo `description` #}
+        <input name="description" value="{{ presupuesto.description }}" class="field w-full" required maxlength="500"
+               pattern="{{ texto_p.patron }}" title="{{ texto_p.ayuda }}">
     </label>
 
     <div class="flex justify-end gap-3 pt-2">

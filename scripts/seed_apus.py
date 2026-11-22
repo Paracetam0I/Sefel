@@ -42,7 +42,7 @@ SEED_APUS: list[ApuSeed] = [
     ApuSeed("MT-002", "Relleno compactado", "m3", "Movimiento de tierra", 16_800, 16_100),
     # Obra gruesa
     ApuSeed("OG-001", "Hormigón H25", "m3", "Obra gruesa", 95_000, 98_500),
-    ApuSeed("OG-002", "Radier G-20 e=10 cm", "m2", "Obra gruesa", 45_000, 49_620),
+    ApuSeed("OG-002", "Radier G-20 espesor 10 cm", "m2", "Obra gruesa", 45_000, 49_620),
     ApuSeed("OG-003", "Acero A630-420H", "kg", "Obra gruesa", 1_450, 1_520),
     ApuSeed("OG-004", "Moldaje de madera", "m2", "Obra gruesa", 12_500, 12_900),
     # Pavimentos
@@ -65,7 +65,10 @@ def verificarTablas() -> bool:
     """True si la base de datos ya tiene todas las tablas de los modelos."""
     import app.models  # noqa: F401  registra todos los modelos
 
-    return set(SQLModel.metadata.tables) <= set(inspect(engine).get_table_names())
+    try:
+        return set(SQLModel.metadata.tables) <= set(inspect(engine).get_table_names())
+    except Exception:  # noqa: BLE001  p. ej. el archivo de la base no existe
+        return False
 
 
 def sembrarApus(session: Session) -> int:
