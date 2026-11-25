@@ -37,7 +37,7 @@
             <div id="resultados-apu" class="mt-2"></div>
         </div>
 
-        {# 2) Unidad y costo: aquí cae la pieza que autocompleta (campos editables) #}
+        {# 2) Unidad y costo calculado del APU: aquí cae la pieza que autocompleta #}
         <div id="campos-apu">
             {% if apu %}{% include "partials/apu/autocompletar_campos.html" %}{% endif %}
         </div>
@@ -111,9 +111,17 @@
                         <input form="editar-item-{{ item.id }}" name="cantidad" type="number" min="1" step="1" required
                                value="{{ item.cantidad }}" class="field w-24 text-right" aria-label="Cantidad">
                     </td>
-                    <td class="td text-right">
-                        <input form="editar-item-{{ item.id }}" name="estimated_unit_cost" type="number" min="0" step="1" required
-                               value="{{ item.estimated_unit_cost }}" class="field w-32 text-right" aria-label="Costo cotizado unitario">
+                    <td class="td whitespace-nowrap text-right">
+                        {# Copia del CDU del APU al agregar el ítem #}
+                        {{ item.estimated_unit_cost | clp }}
+                        <form method="post"
+                              action="/presupuestos/{{ presupuesto.id_presupuesto }}/items/{{ item.id }}/actualizar-precio"
+                              onsubmit="return confirm('¿Copiar el costo actual del APU {{ item_apu.code }}? Reemplaza el costo cotizado y el real de este ítem.')">
+                            <button type="submit" class="mt-1 text-xs font-semibold text-sefel-red hover:underline"
+                                    title="Copiar el costo actual calculado con la receta del APU">
+                                Actualizar precio
+                            </button>
+                        </form>
                     </td>
                     <td class="td text-right">
                         <input form="editar-item-{{ item.id }}" name="real_unit_cost" type="number" min="0" step="1" required

@@ -1,20 +1,24 @@
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from math import ceil
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from pydantic import ValidationError
+from app.core.calculos import costoVacio, costosApu, costosDeApus
 from app.core.db import getSession
 from app.core.dependencies import CurrentUser, requireRoles
 from app.core.flash import flash
 from app.core.permisos import ROLES_APU
 from app.core.validaciones import mensajeDe
 from app.models.apu import APU, APUValidacion
+from app.models.detalle_apu import DetalleApu
+from app.models.material import Material
 from app.templates import templates
 
 
@@ -92,18 +96,15 @@ def _datosFormulario(
     name: str = "",
     unit: str = "",
     category: str = "",
-    unit_cost: str | int = "",
     description: str = "",
-    real_unit_cost: str | int = "",
 ) -> dict:
+    # Sin costos: el APU los calcula a partir de sus recursos
     return {
         "code": code,
         "name": name,
         "unit": unit,
         "category": category,
-        "unit_cost": unit_cost,
         "description": description,
-        "real_unit_cost": real_unit_cost,
     }
 
 
@@ -114,14 +115,8 @@ def _validar(datos: dict) -> tuple[dict, str | None]:
         str(datos.get("name", "")),
         str(datos.get("unit", "")),
         str(datos.get("category", "")),
-        datos.get("unit_cost", ""),
         str(datos.get("description", "")),
-        datos.get("real_unit_cost", ""),
     )
-
-    # Si no se indica costo real, parte igual al cotizado
-    if str(datos_limpios["real_unit_cost"]).strip() == "":
-        datos_limpios["real_unit_cost"] = datos_limpios["unit_cost"]
 
     try:
         apu_validado = APUValidacion.model_validate(datos_limpios)
@@ -142,18 +137,6 @@ def _validar(datos: dict) -> tuple[dict, str | None]:
         if mensajeDe(error):
             # Regla de app/core/validaciones.py: su mensaje ya es el definitivo
             mensaje = mensajeDe(error)
-
-        elif campo == "unit_cost":
-            if tipo == "int_parsing":
-                mensaje = "El precio unitario debe ser un número entero."
-            else:
-                mensaje = "El precio unitario no puede ser negativo."
-
-        elif campo == "real_unit_cost":
-            if tipo == "int_parsing":
-                mensaje = "El costo real debe ser un número entero."
-            else:
-                mensaje = "El costo real no puede ser negativo."
 
         elif campo in nombres:
             nombre, longitud = nombres[campo]
@@ -282,6 +265,9 @@ def _renderLista(
         context={
             "usuario": usuario,
             "apus": visibles,
+            # CDU calculado con los recursos de cada APU visible
+            "costos": costosDeApus(session, [apu.id for apu in visibles]),
+            "costo_vacio": costoVacio(),
             "resumen": _resumen(todos),
             "categorias": categorias,
             "q": q,
@@ -349,18 +335,13 @@ def crear(
     name: str = Form(...),
     unit: str = Form(...),
     category: str = Form(""),
-    unit_cost: str = Form(...),
     description: str = Form(""),
-    real_unit_cost: str = Form(""),
     session: Session = Depends(getSession),
 ):
     es_htmx = request.headers.get("HX-Request") == "true"
 
     datos, error = _validar(
-        _datosFormulario(
-            code, name, unit, category, unit_cost, description,
-            real_unit_cost,
-        )
+        _datosFormulario(code, name, unit, category, description)
     )
 
     if error is None and _codigoExistente(session, datos["code"]):
@@ -450,9 +431,7 @@ def actualizar(
     name: str = Form(...),
     unit: str = Form(...),
     category: str = Form(""),
-    unit_cost: str = Form(...),
     description: str = Form(""),
-    real_unit_cost: str = Form(""),
     session: Session = Depends(getSession),
 ):
     es_htmx = request.headers.get("HX-Request") == "true"
@@ -464,10 +443,7 @@ def actualizar(
         return RedirectResponse(LISTA_URL, status_code=303)
 
     datos, error = _validar(
-        _datosFormulario(
-            code, name, unit, category, unit_cost, description,
-            real_unit_cost,
-        )
+        _datosFormulario(code, name, unit, category, description)
     )
 
     datos["id"] = apu_id
@@ -594,3 +570,298 @@ def cambiarEstado(
         f"{destino}#apu-{apu_id}",
         status_code=303,
     )
+
+
+# Receta del APU: recursos de la base de datos con su cantidad
+# ==========================================
+# El costo del APU (CDU) = suma de cantidad × precio de cada recurso. Solo se
+# pueden agregar recursos ACTIVOS; un recurso aparece una vez por APU.
+
+MAX_RESULTADOS_RECURSOS = 8
+CANTIDAD_MAXIMA = 1_000_000
+DECIMALES_CANTIDAD = 4
+
+
+def _urlReceta(apu_id: int) -> str:
+    return f"/apu/{apu_id}"
+
+
+def _cantidad(texto: str) -> float | None:
+    """'0,35' o '0.35' -> 0.35. None si no es un número > 0 razonable."""
+    try:
+        valor = Decimal(texto.strip().replace(",", "."))
+    except (InvalidOperation, AttributeError):
+        return None
+    if not valor.is_finite() or valor <= 0 or valor > CANTIDAD_MAXIMA:
+        return None
+    valor = round(valor, DECIMALES_CANTIDAD)
+    return float(valor) if valor > 0 else None
+
+
+def _unidad(texto: str) -> str | None:
+    unidad = texto.strip()
+    return unidad if unidad and len(unidad) <= 30 else None
+
+
+def _contextoReceta(session: Session, apu: APU, **extra) -> dict:
+    return {
+        "apu": apu,
+        "costos": costosApu(session, apu),
+        "error": None,
+        "seleccionado": None,
+        "datos": None,
+        **extra,
+    }
+
+
+def _renderReceta(
+    request: Request,
+    usuario,
+    session: Session,
+    apu: APU,
+    *,
+    parcial: bool,
+    status_code: int = 200,
+    **extra,
+):
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/apu/receta.html" if parcial else "apu/receta.html",
+        status_code=status_code,
+        context={"usuario": usuario, **_contextoReceta(session, apu, **extra)},
+    )
+
+
+def _respuestaReceta(
+    request: Request,
+    usuario,
+    session: Session,
+    apu: APU,
+    *,
+    error: str | None = None,
+    **extra,
+):
+    """HTMX: devuelve la receta actualizada (con el error, si lo hay).
+    Navegador: aviso flash y vuelta a la página del APU."""
+    if request.headers.get("HX-Request") == "true":
+        return _renderReceta(
+            request, usuario, session, apu, parcial=True, error=error, **extra,
+        )
+    if error:
+        flash(request, error, "error")
+    return RedirectResponse(_urlReceta(apu.id), status_code=303)
+
+
+def _marcarApuActualizado(session: Session, apu: APU) -> None:
+    # Cambiar la receta cambia el costo del APU
+    apu.updated_at = datetime.now(timezone.utc)
+    session.add(apu)
+
+
+@router.get("/apu/{apu_id}")
+def verReceta(
+    apu_id: int,
+    request: Request,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    apu = _buscar(session, apu_id)
+    if apu is None:
+        flash(request, "El APU solicitado no existe.", "error")
+        return RedirectResponse(LISTA_URL, status_code=303)
+
+    return _renderReceta(
+        request, usuario, session, apu,
+        parcial=request.headers.get("HX-Request") == "true",
+    )
+
+
+@router.get("/apu/{apu_id}/recursos/buscar")
+def buscarRecursos(
+    apu_id: int,
+    request: Request,
+    session: Session = Depends(getSession),
+    q: str = "",
+):
+    """Recursos ACTIVOS que todavía no están en la receta."""
+    termino = q.strip().lower()
+    ya_en_receta = select(DetalleApu.id_material).where(DetalleApu.id_apu == apu_id)
+
+    consulta = select(Material).where(
+        Material.is_active.is_(True),
+        Material.id.not_in(ya_en_receta),
+    )
+    if termino:
+        consulta = consulta.where(
+            or_(
+                func.lower(Material.code).contains(termino, autoescape=True),
+                func.lower(Material.name).contains(termino, autoescape=True),
+            )
+        )
+
+    materiales = session.exec(
+        consulta.order_by(Material.category, Material.name).limit(MAX_RESULTADOS_RECURSOS)
+    ).all()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/apu/recursos_buscar.html",
+        context={"materiales": materiales, "q": q.strip(), "apu_id": apu_id},
+    )
+
+
+@router.get("/apu/{apu_id}/recursos/seleccionar/{material_id}")
+def seleccionarRecurso(
+    apu_id: int,
+    material_id: int,
+    request: Request,
+    session: Session = Depends(getSession),
+):
+    material = session.get(Material, material_id)
+    if material is None or not material.is_active:
+        raise HTTPException(status_code=404, detail="Recurso no encontrado")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/apu/recurso_seleccionado.html",
+        context={"seleccionado": material, "datos": None},
+    )
+
+
+@router.post("/apu/{apu_id}/recursos")
+def agregarRecurso(
+    apu_id: int,
+    request: Request,
+    usuario: CurrentUser,
+    id_material: str = Form(""),
+    cantidad: str = Form(""),
+    unit: str = Form(""),
+    session: Session = Depends(getSession),
+):
+    apu = _buscar(session, apu_id)
+    if apu is None:
+        flash(request, "El APU solicitado no existe.", "error")
+        return RedirectResponse(LISTA_URL, status_code=303)
+
+    material = session.get(Material, int(id_material)) if id_material.strip().isdigit() else None
+    consumo = _cantidad(cantidad)
+    unidad = _unidad(unit) if unit.strip() else (material.unit if material else None)
+    datos = {"cantidad": cantidad, "unit": unit}
+
+    error = None
+    if material is None:
+        error = "Selecciona un recurso de la base de datos."
+    elif not material.is_active:
+        error = "El recurso está inactivo: no se puede agregar a un APU."
+    elif session.exec(
+        select(DetalleApu).where(
+            DetalleApu.id_apu == apu.id, DetalleApu.id_material == material.id
+        )
+    ).first() is not None:
+        error = "Ese recurso ya está en la receta: edita su cantidad."
+    elif consumo is None:
+        error = "La cantidad debe ser un número mayor que 0 (puede tener decimales)."
+    elif unidad is None:
+        error = "La unidad es obligatoria (máximo 30 caracteres)."
+
+    if error:
+        seleccionado = material if material is not None and material.is_active else None
+        return _respuestaReceta(
+            request, usuario, session, apu,
+            error=error, seleccionado=seleccionado, datos=datos,
+        )
+
+    session.add(DetalleApu(
+        id_apu=apu.id, id_material=material.id, unit=unidad, cantidad=consumo,
+    ))
+    _marcarApuActualizado(session, apu)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        return _respuestaReceta(
+            request, usuario, session, apu,
+            error="No se pudo agregar el recurso. Revisa que no esté repetido.",
+        )
+
+    session.refresh(apu)
+    flash(request, f"Recurso '{material.code}' agregado al APU.", "success")
+    return _respuestaReceta(request, usuario, session, apu)
+
+
+def _lineaDeApu(session: Session, apu: APU, detalle_id: int) -> DetalleApu | None:
+    detalle = session.get(DetalleApu, detalle_id)
+    if detalle is None or detalle.id_apu != apu.id:
+        return None
+    return detalle
+
+
+@router.post("/apu/{apu_id}/recursos/{detalle_id}")
+def actualizarRecurso(
+    apu_id: int,
+    detalle_id: int,
+    request: Request,
+    usuario: CurrentUser,
+    cantidad: str = Form(""),
+    unit: str = Form(""),
+    session: Session = Depends(getSession),
+):
+    apu = _buscar(session, apu_id)
+    if apu is None:
+        flash(request, "El APU solicitado no existe.", "error")
+        return RedirectResponse(LISTA_URL, status_code=303)
+
+    detalle = _lineaDeApu(session, apu, detalle_id)
+    consumo = _cantidad(cantidad)
+    unidad = _unidad(unit)
+
+    if detalle is None:
+        return _respuestaReceta(request, usuario, session, apu, error="El recurso ya no está en la receta.")
+    if consumo is None:
+        return _respuestaReceta(
+            request, usuario, session, apu,
+            error="La cantidad debe ser un número mayor que 0 (puede tener decimales).",
+        )
+    if unidad is None:
+        return _respuestaReceta(
+            request, usuario, session, apu,
+            error="La unidad es obligatoria (máximo 30 caracteres).",
+        )
+
+    detalle.cantidad = consumo
+    detalle.unit = unidad
+    detalle.updated_at = datetime.now(timezone.utc)
+    session.add(detalle)
+    _marcarApuActualizado(session, apu)
+    session.commit()
+    session.refresh(apu)
+
+    flash(request, "Cantidad actualizada.", "success")
+    return _respuestaReceta(request, usuario, session, apu)
+
+
+@router.post("/apu/{apu_id}/recursos/{detalle_id}/eliminar")
+def quitarRecurso(
+    apu_id: int,
+    detalle_id: int,
+    request: Request,
+    usuario: CurrentUser,
+    session: Session = Depends(getSession),
+):
+    """Quita la línea de la receta. El recurso sigue en la base de datos."""
+    apu = _buscar(session, apu_id)
+    if apu is None:
+        flash(request, "El APU solicitado no existe.", "error")
+        return RedirectResponse(LISTA_URL, status_code=303)
+
+    detalle = _lineaDeApu(session, apu, detalle_id)
+    if detalle is None:
+        return _respuestaReceta(request, usuario, session, apu, error="El recurso ya no está en la receta.")
+
+    session.delete(detalle)
+    _marcarApuActualizado(session, apu)
+    session.commit()
+    session.refresh(apu)
+
+    flash(request, "Recurso quitado del APU.", "success")
+    return _respuestaReceta(request, usuario, session, apu)

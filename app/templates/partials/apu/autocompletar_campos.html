@@ -5,6 +5,13 @@
     <span class="font-semibold">{{ apu.code }} · {{ apu.name }}</span>
 </p>
 
+{% if not costo.recursos %}
+<div class="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+    Este APU todavía no tiene recursos, así que su costo es $ 0.
+    Agrégale recursos en su receta antes de usarlo en un presupuesto.
+</div>
+{% endif %}
+
 <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
     <div>
         <label for="unit" class="label">Unidad</label>
@@ -19,31 +26,18 @@
         >
     </div>
 
+    {# Precios calculados con la receta del APU: no se ingresan a mano #}
     <div>
-        <label for="estimated_unit_cost" class="label">Costo cotizado unitario (CLP)</label>
-        <input
-            id="estimated_unit_cost"
-            name="estimated_unit_cost"
-            type="number"
-            value="{{ datos.estimated_unit_cost if datos else apu.unit_cost }}"
-            min="0"
-            step="1"
-            required
-            class="field w-full"
-        >
+        <p class="label">Costo cotizado unitario (CDU)</p>
+        <p class="field w-full bg-gray-50 font-bold text-sefel-black" aria-live="polite">{{ costo.unit_cost | clp }}</p>
     </div>
 
     <div>
-        <label for="real_unit_cost" class="label">Costo real unitario (CLP)</label>
-        <input
-            id="real_unit_cost"
-            name="real_unit_cost"
-            type="number"
-            value="{{ datos.real_unit_cost if datos else apu.real_unit_cost }}"
-            min="0"
-            step="1"
-            class="field w-full"
-            placeholder="Igual al cotizado si se deja vacío"
-        >
+        <p class="label">Costo real unitario</p>
+        <p class="field w-full bg-gray-50 text-neutral-700">{{ costo.real_unit_cost | clp }}</p>
     </div>
 </div>
+<p class="mt-2 text-xs text-neutral-500">
+    El presupuesto guarda una copia de estos precios. Si después cambia un recurso,
+    usa «Actualizar precio» en el ítem.
+</p>

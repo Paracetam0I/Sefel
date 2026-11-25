@@ -1,13 +1,14 @@
 from typing import TYPE_CHECKING, List
 from datetime import datetime, timezone
 
-from sqlalchemy import CheckConstraint, Index, column, func
+from sqlalchemy import Index, column, func
 from sqlmodel import Field, SQLModel, Relationship
 from pydantic import field_validator
 
 from app.core.validaciones import validarCodigo, validarTexto
 
 if TYPE_CHECKING:
+    from app.models.detalle_apu import DetalleApu
     from app.models.detalle_presupuesto import DetallePresupuesto
 
 class APUValidacion(SQLModel):
@@ -16,9 +17,8 @@ class APUValidacion(SQLModel):
     unit: str = Field(max_length=30)
     category: str | None = Field(default=None, max_length=100)
     description: str | None = None
-    unit_cost: int = Field(ge=0)
-    # Costo real pagado. Si el formulario lo deja vacío se usa el costo cotizado.
-    real_unit_cost: int = Field(ge=0)
+    # Sin costos: el costo unitario del APU se calcula con sus recursos
+    # (app.core.calculos.costosApu).
 
     @field_validator("code")
     @classmethod
@@ -58,6 +58,12 @@ class APUValidacion(SQLModel):
 
 
 class APU(SQLModel, table=True):
+    """APU = "receta": combina recursos de la base de datos (tabla materiales).
+
+    No guarda costo propio. Su costo directo unitario (CDU) es la suma de
+    cantidad × precio de cada recurso (ver app/core/calculos.py).
+    """
+
     __tablename__ = "apu"
 
     __table_args__ = (
@@ -65,14 +71,6 @@ class APU(SQLModel, table=True):
             "uq_apu_code_lower",
             func.lower(column("code")),
             unique=True,
-        ),
-        CheckConstraint(
-            "unit_cost >= 0",
-            name="ck_apu_unit_cost_non_negative",
-        ),
-        CheckConstraint(
-            "real_unit_cost >= 0",
-            name="ck_apu_real_unit_cost_non_negative",
         ),
     )
 
@@ -84,16 +82,6 @@ class APU(SQLModel, table=True):
     unit: str = Field(max_length=30, nullable=False)
     category: str | None = Field(default=None, max_length=100)
 
-    # Costo cotizado (estimado) con el que se crea el APU
-    unit_cost: int = Field(ge=0, nullable=False)
-    # Costo real: lo que finalmente se paga al ejecutar el presupuesto
-    real_unit_cost: int = Field(
-        default=0,
-        ge=0,
-        nullable=False,
-        sa_column_kwargs={"server_default": "0"},
-    )
-
     is_active: bool = Field(default=True, nullable=False)
 
     created_at: datetime = Field(
@@ -102,6 +90,15 @@ class APU(SQLModel, table=True):
     )
 
     updated_at: datetime | None = Field(default=None, nullable=True)
+
+    # Recursos de la receta; se borran junto con el APU
+    recursos: List["DetalleApu"] = Relationship(
+        back_populates="apu",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "order_by": "DetalleApu.id",
+        },
+    )
 
     detalles_presupuesto: List["DetallePresupuesto"] = Relationship(
         back_populates="apu",

@@ -24,11 +24,23 @@
 | `/presupuestos/{id}/estado` | POST | Rol de edición: `BUDGETS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
 | `/presupuestos/{id}/items/nuevo` | GET | Rol de edición: `BUDGETS`, `BOTH` o `ADMIN` (sin exclusividad por creador) | Redirige a `/login`; con otro rol, 403 |
 | `/presupuestos/{id}/items` | POST | Rol de edición: `BUDGETS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
-| `/presupuestos/{id}/items/{item_id}` | POST | Rol de edición: `BUDGETS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}` | POST | Rol de edición: `BUDGETS`, `BOTH` o `ADMIN` (cantidad y costo real; el cotizado sale del APU) | Redirige a `/login`; con otro rol, 403 |
+| `/presupuestos/{id}/items/{item_id}/actualizar-precio` | POST | Rol de edición: `BUDGETS`, `BOTH` o `ADMIN` (vuelve a copiar el costo calculado del APU) | Redirige a `/login`; con otro rol, 403 |
+| `/base-datos` | GET, POST | Rol de Base de datos: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/base-datos/nuevo` | GET | Rol de Base de datos: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/base-datos/{id}/editar` | GET | Rol de Base de datos: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/base-datos/{id}` | POST | Rol de Base de datos: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/base-datos/{id}/estado` | POST | Rol de Base de datos: `MATERIALS`, `BOTH` o `ADMIN` (activar/desactivar; no se elimina) | Redirige a `/login`; con otro rol, 403 |
 | `/apu` | GET, POST | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
 | `/apu/nuevo` | GET | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
 | `/apu/{id}/editar` | GET | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/apu/{id}` | GET | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` (receta: recursos, subtotales por categoría y CDU) | Redirige a `/login`; con otro rol, 403 |
 | `/apu/{id}` | POST | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
+| `/apu/{id}/recursos` | POST | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` (agrega un recurso activo a la receta) | Redirige a `/login`; con otro rol, 403 |
+| `/apu/{id}/recursos/buscar` | GET | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` (recursos activos que no están en la receta) | Redirige a `/login`; con otro rol, 403 |
+| `/apu/{id}/recursos/seleccionar/{material_id}` | GET | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` (404 si el recurso está inactivo) | Redirige a `/login`; con otro rol, 403 |
+| `/apu/{id}/recursos/{detalle_id}` | POST | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` (cantidad y unidad de la línea) | Redirige a `/login`; con otro rol, 403 |
+| `/apu/{id}/recursos/{detalle_id}/eliminar` | POST | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` (quita la línea; el recurso sigue en la base) | Redirige a `/login`; con otro rol, 403 |
 | `/apu/{id}/estado` | POST | Rol de APU: `MATERIALS`, `BOTH` o `ADMIN` | Redirige a `/login`; con otro rol, 403 |
 | `/admin/users` | GET, POST | Rol `ADMIN` | Redirige a `/login`; con otro rol, 403 |
 | `/admin/users/new` | GET | Rol `ADMIN` | Redirige a `/admin/users?nuevo=1` |
@@ -55,7 +67,8 @@ Definidos en `app/core/permisos.py` (fuente única para routers y plantillas):
 | Módulo | Roles |
 |---|---|
 | Usuarios (`/admin/users`) | `ADMIN` |
-| APU | `MATERIALS`, `BOTH`, `ADMIN` |
+| Base de datos (recursos) | `MATERIALS`, `BOTH`, `ADMIN` |
+| APU (recetas) | `MATERIALS`, `BOTH`, `ADMIN` (el Informe 2 asigna los APU al encargado de presupuestos: ver `ROLES_APU` en `app/core/permisos.py`) |
 | Presupuestos (ver y exportar) | `BUDGETS`, `BOTH`, `ADMIN`, `VIEWER` |
 | Presupuestos (crear/editar) | `BUDGETS`, `BOTH`, `ADMIN` — cualquiera, sin exclusividad por creador |
 | Dashboard | Todos los autenticados |

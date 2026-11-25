@@ -1,0 +1,25 @@
+<input type="hidden" name="id_material" value="{{ seleccionado.id }}">
+
+<p class="mb-4 text-sm text-gray-500">
+    Recurso seleccionado:
+    <span class="font-semibold">{{ seleccionado.code }} · {{ seleccionado.name }}</span>
+    ({{ seleccionado.category.value }}, {{ seleccionado.unit_cost | clp }} / {{ seleccionado.unit }})
+</p>
+
+<div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+    <div>
+        <label for="cantidad-recurso" class="label">Cantidad por unidad de APU</label>
+        <input id="cantidad-recurso" name="cantidad" type="number" min="0.0001" step="any" required
+               value="{{ datos.cantidad if datos else '' }}" placeholder="Ej. 0,35"
+               class="field w-full" autofocus>
+    </div>
+    <div>
+        <label for="unidad-recurso" class="label">Unidad</label>
+        <input id="unidad-recurso" name="unit" type="text" maxlength="30" required
+               value="{{ datos.unit if datos and datos.unit else seleccionado.unit }}"
+               class="field w-full">
+    </div>
+</div>
+<div class="mt-4 flex justify-end">
+    <button type="submit" class="btn btn-primary">Agregar a la receta</button>
+</div>

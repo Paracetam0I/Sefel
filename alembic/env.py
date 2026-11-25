@@ -19,6 +19,8 @@ from app.core.db import engine
 from app.models.user import User
 from app.models.presupuesto import Presupuesto
 from app.models.apu import APU
+from app.models.material import Material  # noqa: F401
+from app.models.detalle_apu import DetalleApu  # noqa: F401
 from app.models.detalle_presupuesto import DetallePresupuesto  # noqa: F401
 from app.models.auditoria import AuditoriaCuenta  # noqa: F401
 

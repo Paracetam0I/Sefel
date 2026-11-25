@@ -6,9 +6,9 @@ import pytest
 from sqlmodel import select
 
 from app.core.calculos import calcularMontos
-from app.core.routers.apu import _validar
-from app.models.apu import APU
+from app.core.routers.materiales import _validar
 from app.models.detalle_presupuesto import DetallePresupuesto
+from app.models.material import Material
 from app.models.presupuesto import Presupuesto
 from app.models.user import UserRole
 
@@ -27,25 +27,21 @@ def presupuesto(session, user):
     return p
 
 
-def crearApu(session, code, category, unit_cost, real_unit_cost):
-    apu = APU(
-        code=code, name=f"APU {code}", unit="m3", category=category,
-        unit_cost=unit_cost, real_unit_cost=real_unit_cost,
-    )
-    session.add(apu)
-    session.commit()
-    session.refresh(apu)
-    return apu
+@pytest.fixture
+def crearApu(crear_apu):
+    """crearApu(code, categoría del APU, CDU cotizado, CDU real)."""
+    def crear(code, category, unit_cost, real_unit_cost):
+        return crear_apu(code, unit_cost, real_unit_cost, category=category)
+    return crear
 
 
-def agregarItem(client, presupuesto, apu, cantidad, cotizado, real=""):
+def agregarItem(client, presupuesto, apu, cantidad):
+    # El precio no se envía: el servidor lo copia del costo calculado del APU
     return client.post(
         f"/presupuestos/{presupuesto.id_presupuesto}/items",
         data={
             "id_apu": str(apu.id),
             "unit": apu.unit,
-            "estimated_unit_cost": str(cotizado),
-            "real_unit_cost": str(real),
             "cantidad": str(cantidad),
             "costo_directo": "0",
             "costo_indirecto": "0",
@@ -92,42 +88,42 @@ def test_calcular_montos_redondea_y_cuadra_el_desglose():
     assert montos["monto_total"] == neto + montos["monto_iva"]
 
 
-# APU
+# Recursos (Base de datos): costo cotizado y real
 # ==========================================
 
-def test_apu_costo_real_vacio_parte_igual_al_cotizado():
+def test_recurso_costo_real_vacio_parte_igual_al_cotizado():
     datos, error = _validar({
-        "code": "A", "name": "N", "unit": "m", "unit_cost": "5000",
-        "real_unit_cost": "",
+        "code": "A", "name": "N", "unit": "m", "category": "Materiales",
+        "unit_cost": "5000", "real_unit_cost": "",
     })
     assert error is None
     assert datos["real_unit_cost"] == 5000
 
 
-def test_apu_rechaza_costo_real_negativo():
+def test_recurso_rechaza_costo_real_negativo():
     _, error = _validar({
-        "code": "A", "name": "N", "unit": "m", "unit_cost": "5000",
-        "real_unit_cost": "-1",
+        "code": "A", "name": "N", "unit": "m", "category": "Materiales",
+        "unit_cost": "5000", "real_unit_cost": "-1",
     })
     assert error == "El costo real no puede ser negativo."
 
 
-def test_crear_apu_guarda_costo_cotizado_y_real(logged_in_client, session):
+def test_crear_recurso_guarda_costo_cotizado_y_real(logged_in_client, session):
     response = logged_in_client.post(
-        "/apu",
+        "/base-datos",
         data={
-            "code": "APU-R", "name": "Hormigón", "unit": "m3",
+            "code": "MAT-R", "name": "Hormigón", "unit": "m3", "category": "Materiales",
             "unit_cost": "85000", "real_unit_cost": "91000",
         },
         follow_redirects=False,
     )
     assert response.status_code == 303
 
-    apu = session.exec(select(APU).where(APU.code == "APU-R")).one()
-    assert apu.unit_cost == 85000
-    assert apu.real_unit_cost == 91000
+    material = session.exec(select(Material).where(Material.code == "MAT-R")).one()
+    assert material.unit_cost == 85000
+    assert material.real_unit_cost == 91000
 
-    listado = logged_in_client.get("/apu")
+    listado = logged_in_client.get("/base-datos")
     assert "Costo real" in listado.text
     assert "$ 91.000" in listado.text
 
@@ -136,33 +132,34 @@ def test_crear_apu_guarda_costo_cotizado_y_real(logged_in_client, session):
 # ==========================================
 
 def test_item_calcula_subtotal_real_y_totales_del_presupuesto(
-    logged_in_client, session, presupuesto
+    logged_in_client, session, presupuesto, crearApu
 ):
-    a = crearApu(session, "A-1", "Obra gruesa", 1000, 1200)
-    b = crearApu(session, "B-1", "Terminaciones", 500, 400)
+    a = crearApu("A-1", "Obra gruesa", 1000, 1200)
+    b = crearApu("B-1", "Terminaciones", 500, 400)
 
-    assert agregarItem(logged_in_client, presupuesto, a, 3, 1000, 1200).status_code == 303
-    assert agregarItem(logged_in_client, presupuesto, b, 2, 500).status_code == 303  # real vacío
+    assert agregarItem(logged_in_client, presupuesto, a, 3).status_code == 303
+    assert agregarItem(logged_in_client, presupuesto, b, 2).status_code == 303
 
     items = session.exec(select(DetallePresupuesto).order_by(DetallePresupuesto.id)).all()
-    assert [(i.subtotal, i.real_subtotal) for i in items] == [(3000, 3600), (1000, 1000)]
+    assert [(i.subtotal, i.real_subtotal) for i in items] == [(3000, 3600), (1000, 800)]
 
     session.refresh(presupuesto)
     assert presupuesto.total_cotizado == 4000
-    assert presupuesto.total_real == 4600
-    assert presupuesto.monto_costo_neto == 4600   # sin porcentajes aún
+    assert presupuesto.total_real == 4400
+    assert presupuesto.monto_costo_neto == 4400   # sin porcentajes aún
 
 
 def test_editar_item_recalcula_subtotales_y_presupuesto(
-    logged_in_client, session, presupuesto
+    logged_in_client, session, presupuesto, crearApu
 ):
-    a = crearApu(session, "A-1", "Obra gruesa", 1000, 1000)
-    agregarItem(logged_in_client, presupuesto, a, 1, 1000, 1000)
+    a = crearApu("A-1", "Obra gruesa", 1000, 1000)
+    agregarItem(logged_in_client, presupuesto, a, 1)
     item = session.exec(select(DetallePresupuesto)).one()
 
+    # El costo cotizado es el del APU: aunque se envíe otro, no cambia
     response = logged_in_client.post(
         f"/presupuestos/{presupuesto.id_presupuesto}/items/{item.id}",
-        data={"cantidad": "4", "estimated_unit_cost": "1000", "real_unit_cost": "1500"},
+        data={"cantidad": "4", "estimated_unit_cost": "999999", "real_unit_cost": "1500"},
         follow_redirects=False,
     )
     assert response.status_code == 303
@@ -177,10 +174,10 @@ def test_editar_item_recalcula_subtotales_y_presupuesto(
 # ==========================================
 
 def test_guardar_porcentajes_calcula_y_almacena_montos(
-    logged_in_client, session, presupuesto
+    logged_in_client, session, presupuesto, crearApu
 ):
-    a = crearApu(session, "A-1", "Obra gruesa", 900_000, 1_000_000)
-    agregarItem(logged_in_client, presupuesto, a, 1, 900_000, 1_000_000)
+    a = crearApu("A-1", "Obra gruesa", 900_000, 1_000_000)
+    agregarItem(logged_in_client, presupuesto, a, 1)
 
     response = logged_in_client.post(
         f"/presupuestos/{presupuesto.id_presupuesto}/porcentajes",

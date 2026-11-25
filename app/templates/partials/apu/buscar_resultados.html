@@ -1,6 +1,8 @@
 {% if apus %}
 <ul class="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white shadow-sm" role="listbox">
     {% for a in apus %}
+    {# Costo calculado con la receta del APU #}
+    {% set costo = costos.get(a.id, costo_vacio) %}
     <li role="option">
         <button
             type="button"
@@ -13,8 +15,12 @@
                 <span class="font-semibold">{{ a.code }}</span> · {{ a.name }}
             </span>
             <span class="text-right text-gray-500">
-                {{ a.unit_cost|clp }} / {{ a.unit }}
-                <span class="block text-xs">Real: {{ a.real_unit_cost|clp }}</span>
+                {% if costo.recursos %}
+                    {{ costo.unit_cost|clp }} / {{ a.unit }}
+                    <span class="block text-xs">Real: {{ costo.real_unit_cost|clp }}</span>
+                {% else %}
+                    <span class="text-red-700">Sin recursos</span>
+                {% endif %}
             </span>
         </button>
     </li>

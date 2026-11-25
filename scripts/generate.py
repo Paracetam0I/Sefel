@@ -11,6 +11,8 @@ from app.core.db import crearArchivoBD, engine
 
 # --- IMPORTAR TODOS LOS MODELOS (obligatorio para registrarlos en metadata) ---
 from app.models.apu import APU, APUValidacion
+from app.models.material import Material
+from app.models.detalle_apu import DetalleApu
 from app.models.user import User, Presupuesto, UserRole
 from app.models.detalle_presupuesto import DetallePresupuesto
 from app.models.auditoria import AuditoriaCuenta

@@ -4,27 +4,20 @@ import pytest
 from sqlmodel import select
 
 from app.core.security import hashPassword
-from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto
+from app.models.material import Material
 from app.models.user import Presupuesto, User, UserRole
 
 
 @pytest.fixture
-def apu(session):
-    a = APU(code="APU-001", name="Barra acero A630", unit="kg", unit_cost=2500, is_active=True)
-    session.add(a)
-    session.commit()
-    session.refresh(a)
-    return a
+def apu(crear_apu):
+    # Receta de 1 recurso: CDU cotizado 2500, real 2600
+    return crear_apu("APU-001", 2500, 2600, name="Barra acero A630", unit="kg")
 
 
 @pytest.fixture
-def apu_inactivo(session):
-    a = APU(code="APU-002", name="Perno de anclaje", unit="un", unit_cost=3450, is_active=False)
-    session.add(a)
-    session.commit()
-    session.refresh(a)
-    return a
+def apu_inactivo(crear_apu):
+    return crear_apu("APU-002", 3450, name="Perno de anclaje", unit="un", is_active=False)
 
 
 @pytest.fixture
@@ -45,7 +38,6 @@ def datosItem(apu, **cambios):
     datos = {
         "id_apu": str(apu.id),
         "unit": "kg",
-        "estimated_unit_cost": "10500",
         "cantidad": "3",
         "costo_directo": "1000",
         "costo_indirecto": "500",
@@ -84,12 +76,21 @@ def test_viewer_no_puede_buscar_apus(logged_in_client, session, user):
     assert response.json() == {"detail": "Sin permiso"}
 
 
-def test_autocompletar_devuelve_unidad_y_costo_del_apu(logged_in_client, apu):
+def test_buscar_muestra_el_costo_calculado_del_apu(logged_in_client, apu):
+    response = logged_in_client.get("/api/apu/buscar?q=APU-001")
+
+    assert "$ 2.500" in response.text
+    assert "$ 2.600" in response.text
+
+
+def test_autocompletar_devuelve_unidad_y_costo_calculado_del_apu(logged_in_client, apu):
     response = logged_in_client.get(f"/api/apu/{apu.id}/autocompletar")
 
     assert response.status_code == 200
     assert 'value="kg"' in response.text
-    assert 'value="2500"' in response.text
+    assert "$ 2.500" in response.text               # CDU cotizado (solo lectura)
+    assert "$ 2.600" in response.text               # CDU real
+    assert 'name="estimated_unit_cost"' not in response.text
 
 
 def test_autocompletar_rechaza_apu_inactivo(logged_in_client, apu_inactivo):
@@ -101,11 +102,11 @@ def test_autocompletar_rechaza_apu_inactivo(logged_in_client, apu_inactivo):
 # Guardar el ítem
 # ==========================================
 
-def test_agregar_item_guarda_copia_editable_y_no_cambia_el_apu(
+def test_agregar_item_copia_el_costo_calculado_del_apu(
     logged_in_client, session, presupuesto, apu
 ):
-    # Se intenta colar un subtotal falso: el servidor debe ignorarlo
-    datos = datosItem(apu, subtotal="1")
+    # Se intenta colar un subtotal y un costo falsos: el servidor los ignora
+    datos = datosItem(apu, subtotal="1", estimated_unit_cost="1")
 
     response = logged_in_client.post(
         f"/presupuestos/{presupuesto.id_presupuesto}/items",
@@ -118,13 +119,12 @@ def test_agregar_item_guarda_copia_editable_y_no_cambia_el_apu(
     item = session.exec(select(DetallePresupuesto)).first()
     assert item is not None
     assert item.id_apu == apu.id
-    assert item.estimated_unit_cost == 10500   # el valor editado
-    assert item.subtotal == 31500              # 3 * 10500, calculado en el servidor
+    assert item.estimated_unit_cost == 2500    # CDU de la receta del APU
+    assert item.real_unit_cost == 2600
+    assert item.subtotal == 7500               # 3 * 2500, calculado en el servidor
+    assert item.real_subtotal == 7800
     assert item.costo_directo == 1000
     assert item.costo_indirecto == 500
-
-    session.refresh(apu)
-    assert apu.unit_cost == 2500               # el catálogo no cambió
 
 
 def test_rechaza_apu_inactivo_al_guardar(
@@ -186,3 +186,46 @@ def test_viewer_recibe_403_al_agregar_items(
     )
 
     assert response.status_code == 403
+
+def test_rechaza_apu_sin_recursos(logged_in_client, session, presupuesto, crear_apu):
+    vacio = crear_apu("APU-VACIO", con_recursos=False)
+
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items",
+        data=datosItem(vacio),
+    )
+
+    assert response.status_code == 400
+    assert "no tiene recursos" in response.text
+    assert session.exec(select(DetallePresupuesto)).first() is None
+
+
+def test_el_item_conserva_su_precio_hasta_actualizarlo(
+    logged_in_client, session, presupuesto, apu
+):
+    logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items", data=datosItem(apu),
+    )
+    item = session.exec(select(DetallePresupuesto)).one()
+
+    # Sube el precio del recurso en la Base de datos
+    recurso = session.exec(select(Material).where(Material.code == "REC-APU-001")).one()
+    recurso.unit_cost = 3000
+    recurso.real_unit_cost = 3100
+    session.add(recurso)
+    session.commit()
+
+    session.refresh(item)
+    assert item.estimated_unit_cost == 2500     # el presupuesto guarda su copia
+
+    response = logged_in_client.post(
+        f"/presupuestos/{presupuesto.id_presupuesto}/items/{item.id}/actualizar-precio",
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    session.refresh(item)
+    session.refresh(presupuesto)
+    assert (item.estimated_unit_cost, item.real_unit_cost) == (3000, 3100)
+    assert (item.subtotal, item.real_subtotal) == (9000, 9300)
+    assert (presupuesto.total_cotizado, presupuesto.total_real) == (9000, 9300)

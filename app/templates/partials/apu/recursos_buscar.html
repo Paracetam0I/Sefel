@@ -1,0 +1,26 @@
+{% if materiales %}
+<ul class="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white shadow-sm" role="listbox">
+    {% for m in materiales %}
+    <li role="option">
+        <button
+            type="button"
+            class="flex w-full items-center justify-between gap-4 px-3 py-2 text-left text-sm hover:bg-gray-50"
+            hx-get="/apu/{{ apu_id }}/recursos/seleccionar/{{ m.id }}"
+            hx-target="#recurso-seleccionado"
+            hx-swap="innerHTML"
+        >
+            <span>
+                <span class="font-semibold">{{ m.code }}</span> · {{ m.name }}
+                <span class="block text-xs text-gray-500">{{ m.category.value }}</span>
+            </span>
+            <span class="text-right text-gray-500">{{ m.unit_cost | clp }} / {{ m.unit }}</span>
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="px-3 py-2 text-sm text-gray-500">
+    Sin recursos activos{% if q %} para «{{ q }}»{% endif %} que no estén ya en la receta.
+    <a href="/base-datos" class="font-semibold text-sefel-red hover:underline">Ir a la Base de datos</a>
+</p>
+{% endif %}

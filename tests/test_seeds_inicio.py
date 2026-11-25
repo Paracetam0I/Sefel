@@ -6,12 +6,14 @@ from sqlmodel import Session, SQLModel, create_engine, select
 import app.core.db as db
 import client
 from app.core import inicializacion
+from app.core.calculos import costosDeApus
 from app.models.apu import APU
+from app.models.material import Material
 from app.models.detalle_presupuesto import DetallePresupuesto
 from app.models.presupuesto import Presupuesto
 from app.models.user import User, UserRole
 from scripts import iniciar, seed_admin
-from scripts.seed_apus import SEED_APUS, sembrarApus
+from scripts.seed_apus import SEED_APUS, SEED_MATERIALES, sembrarApus
 from scripts.seed_presupuestos import SEED_PRESUPUESTOS, sembrarPresupuestos
 
 
@@ -26,7 +28,13 @@ def test_seed_apus_crea_el_catalogo_y_es_idempotente(session):
     apus = session.exec(select(APU)).all()
     assert len(apus) == len(SEED_APUS)
     assert any(not a.is_active for a in apus)            # incluye un APU inactivo
-    assert all(a.real_unit_cost >= 0 for a in apus)
+    assert len(session.exec(select(Material)).all()) == len(SEED_MATERIALES)
+
+    # Todos los APU tienen receta, y su costo sale de ella
+    costos = costosDeApus(session)
+    assert all(costos[a.id]["recursos"] > 0 for a in apus)
+    og001 = next(a for a in apus if a.code == "OG-001")
+    assert costos[og001.id]["unit_cost"] == 95_000        # 1,05 m3 hormigón + MO + herramientas
 
 
 def test_seed_presupuestos_requiere_usuarios(session):
@@ -73,7 +81,8 @@ def test_prepara_una_bd_nueva_y_luego_la_reconoce_al_dia(bd_temporal):
     assert iniciar.verificarTablas() == []
 
     tablas = set(inspect(bd_temporal).get_table_names())
-    assert {"user", "apu", "presupuesto", "detalle_presupuesto", "auditoria_cuentas", "alembic_version"} <= tablas
+    assert {"user", "apu", "presupuesto", "detalle_presupuesto", "auditoria_cuentas",
+            "materiales", "detalles_apu", "alembic_version"} <= tablas
 
     assert iniciar.prepararBaseDatos().startswith("al día")
 

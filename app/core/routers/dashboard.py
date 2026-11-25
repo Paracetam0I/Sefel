@@ -6,8 +6,10 @@ from sqlmodel import Session, select
 
 from app.core.db import getSession
 from app.core.dependencies import CurrentUser
+from app.core.calculos import costoVacio, costosDeApus
 from app.core.permisos import puede
 from app.models.apu import APU
+from app.models.material import Material
 from app.models.auditoria import AuditoriaCuenta
 from app.models.presupuesto import Presupuesto, StatusPresupuestos
 from app.models.user import User
@@ -53,15 +55,25 @@ def _resumenPresupuestos(session: Session) -> dict:
 
 def _resumenApu(session: Session) -> dict:
     desde = datetime.now(timezone.utc) - timedelta(days=DIAS_ACTUALIZADOS)
+    recientes = session.exec(
+        select(APU)
+        .order_by(func.coalesce(APU.updated_at, APU.created_at).desc())
+        .limit(ULTIMOS)
+    ).all()
+    costos = costosDeApus(session, [a.id for a in recientes])
     return {
         "total": _contar(session, APU),
         "activos": _contar(session, APU, APU.is_active.is_(True)),
         "actualizados": _contar(session, APU, APU.updated_at >= desde),
-        "recientes": session.exec(
-            select(APU)
-            .order_by(func.coalesce(APU.updated_at, APU.created_at).desc())
-            .limit(ULTIMOS)
-        ).all(),
+        # (APU, costo calculado con su receta)
+        "recientes": [(a, costos.get(a.id, costoVacio())) for a in recientes],
+    }
+
+
+def _resumenMateriales(session: Session) -> dict:
+    return {
+        "total": _contar(session, Material),
+        "activos": _contar(session, Material, Material.is_active.is_(True)),
     }
 
 
@@ -103,6 +115,9 @@ def mostrarDashboard(
                 _resumenPresupuestos(session) if puede(usuario, "presupuestos") else None
             ),
             "apus": _resumenApu(session) if puede(usuario, "apu") else None,
+            "materiales": (
+                _resumenMateriales(session) if puede(usuario, "materiales") else None
+            ),
             "usuarios": (
                 _resumenUsuarios(session) if puede(usuario, "usuarios") else None
             ),

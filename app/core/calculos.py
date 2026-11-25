@@ -1,6 +1,16 @@
-"""Cálculos de presupuestación: subtotales de ítems, totales y porcentajes.
+"""Cálculos de presupuestación: costo de los APU, subtotales de ítems,
+totales y porcentajes.
 
-Fórmulas (formato de la cotización; montos CLP enteros, redondeados al peso):
+APU (receta de recursos de la base de datos):
+    costo parcial          = cantidad × precio unitario del recurso (al peso)
+    CDU del APU            = suma de los costos parciales (cotizado y real)
+    Los parciales se redondean antes de sumar, para que el desglose cuadre.
+
+Ítem del presupuesto:
+    precio unitario        = copia del CDU del APU al agregarlo
+    subtotal               = cantidad × precio unitario
+
+Presupuesto (formato de la cotización; montos CLP enteros, redondeados al peso):
     base (costo directo)   = costo_directo fijo (si > 0) o total_real
     monto_gastos_generales = base * pct_gastos_generales / 100
     monto_utilidad         = base * pct_utilidad / 100
@@ -16,7 +26,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlmodel import Session, select
 
 from app.models.apu import APU
+from app.models.detalle_apu import DetalleApu
 from app.models.detalle_presupuesto import DetallePresupuesto
+from app.models.material import CATEGORIAS_RECURSO, Material
 from app.models.presupuesto import Presupuesto
 
 SIN_CATEGORIA = "Sin categoría"
@@ -30,6 +42,91 @@ def _porcentaje(monto: int | Decimal, pct: float) -> Decimal:
     # str() evita arrastrar el error binario del float (19.9 -> 19.899999...)
     return Decimal(monto) * Decimal(str(pct)) / Decimal(100)
 
+
+# APU: costo a partir de sus recursos
+# ==========================================
+
+def costoParcial(cantidad: float, precio_unitario: int) -> int:
+    """cantidad × precio, redondeado al peso. str() evita el error del float."""
+    return _redondear(Decimal(str(cantidad)) * Decimal(precio_unitario))
+
+
+def resumirReceta(lineas) -> dict:
+    """Desglose de un APU a partir de sus líneas (detalle, material).
+
+    Devuelve las líneas con su costo parcial, los subtotales por categoría
+    (siempre las cuatro categorías fijas, aunque estén en 0) y el CDU.
+    """
+    recursos = []
+    categorias = {
+        nombre: {"categoria": nombre, "cantidad_recursos": 0, "cotizado": 0, "real": 0}
+        for nombre in CATEGORIAS_RECURSO
+    }
+    for detalle, material in lineas:
+        parcial = costoParcial(detalle.cantidad, material.unit_cost)
+        parcial_real = costoParcial(detalle.cantidad, material.real_unit_cost)
+        recursos.append({
+            "detalle": detalle,
+            "material": material,
+            "parcial": parcial,
+            "parcial_real": parcial_real,
+        })
+        grupo = categorias[_valorCategoria(material.category)]
+        grupo["cantidad_recursos"] += 1
+        grupo["cotizado"] += parcial
+        grupo["real"] += parcial_real
+
+    return {
+        "recursos": recursos,
+        "categorias": list(categorias.values()),
+        "unit_cost": sum(r["parcial"] for r in recursos),
+        "real_unit_cost": sum(r["parcial_real"] for r in recursos),
+    }
+
+
+def _valorCategoria(categoria) -> str:
+    return getattr(categoria, "value", categoria)
+
+
+def _lineasReceta(session: Session, apu_ids: list[int] | None = None) -> list:
+    consulta = (
+        select(DetalleApu, Material)
+        .join(Material, Material.id == DetalleApu.id_material)
+        .order_by(DetalleApu.id)
+    )
+    if apu_ids is not None:
+        consulta = consulta.where(DetalleApu.id_apu.in_(apu_ids))
+    return session.exec(consulta).all()
+
+
+def costosApu(session: Session, apu: APU) -> dict:
+    """Desglose completo de un APU (ver resumirReceta)."""
+    return resumirReceta(_lineasReceta(session, [apu.id]))
+
+
+def costosDeApus(session: Session, apu_ids: list[int] | None = None) -> dict[int, dict]:
+    """CDU cotizado/real y cantidad de recursos de varios APU en una consulta.
+
+    {id_apu: {"unit_cost": int, "real_unit_cost": int, "recursos": int}}
+    Los APU sin recursos no aparecen: usar costoVacio() como valor por defecto.
+    """
+    if apu_ids is not None and not apu_ids:
+        return {}
+    costos: dict[int, dict] = defaultdict(costoVacio)
+    for detalle, material in _lineasReceta(session, apu_ids):
+        costo = costos[detalle.id_apu]
+        costo["unit_cost"] += costoParcial(detalle.cantidad, material.unit_cost)
+        costo["real_unit_cost"] += costoParcial(detalle.cantidad, material.real_unit_cost)
+        costo["recursos"] += 1
+    return dict(costos)
+
+
+def costoVacio() -> dict:
+    return {"unit_cost": 0, "real_unit_cost": 0, "recursos": 0}
+
+
+# Presupuesto
+# ==========================================
 
 def calcularSubtotales(detalle: DetallePresupuesto) -> DetallePresupuesto:
     """Calcula subtotal cotizado y real de una línea del presupuesto."""

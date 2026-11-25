@@ -1,0 +1,162 @@
+{#
+    Receta del APU: resumen del costo, formulario para agregar recursos y
+    detalle por categoría. Todas las acciones devuelven este mismo fragmento
+    (hx-target="#receta-apu").
+#}
+{% from "partials/ui.html" import icono, stat_card %}
+
+<section class="mt-8 grid grid-cols-2 gap-5 lg:grid-cols-4" aria-label="Costo del APU">
+    {{ stat_card("CDU cotizado", costos.unit_cost | clp, "Por " ~ apu.unit ~ ", suma de los costos parciales") }}
+    {{ stat_card("CDU real", costos.real_unit_cost | clp, "Con el costo real de cada recurso") }}
+    {{ stat_card("Recursos", costos.recursos | length, "En la receta") }}
+    {{ stat_card("Actualizado", (apu.updated_at or apu.created_at) | fecha, "Último cambio en el APU o su receta") }}
+</section>
+
+{# Agregar recurso #}
+<section class="card mt-8 p-6">
+    <h2 class="mb-4 text-lg font-bold text-sefel-black">Agregar recurso</h2>
+
+    {% if error %}
+    <div class="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form
+        method="post"
+        action="/apu/{{ apu.id }}/recursos"
+        hx-post="/apu/{{ apu.id }}/recursos"
+        hx-target="#receta-apu"
+        hx-swap="innerHTML"
+        class="space-y-4"
+    >
+        {# Buscador: solo recursos activos que aún no están en la receta #}
+        <div>
+            <label for="buscar-recurso" class="label">Recurso de la base de datos</label>
+            <input
+                id="buscar-recurso"
+                type="search"
+                name="q"
+                placeholder="Buscar por código o nombre…"
+                autocomplete="off"
+                class="field w-full"
+                x-data
+                @keydown.enter.prevent
+                hx-get="/apu/{{ apu.id }}/recursos/buscar"
+                hx-trigger="input changed delay:300ms, search, focus once"
+                hx-target="#resultados-recursos"
+                hx-swap="innerHTML"
+            >
+            <div id="resultados-recursos" class="mt-2"></div>
+        </div>
+
+        {# Aquí cae el recurso elegido: cantidad, unidad y botón Agregar #}
+        <div id="recurso-seleccionado">
+            {% if seleccionado %}{% include "partials/apu/recurso_seleccionado.html" %}{% endif %}
+        </div>
+    </form>
+</section>
+
+{# Detalle por categoría #}
+<section class="card mt-8 overflow-hidden">
+    <div class="flex flex-wrap items-center justify-between gap-4 p-5">
+        <h2 class="text-lg font-bold text-sefel-black">Recursos del APU</h2>
+        <div class="flex gap-6 text-sm">
+            <span>CDU cotizado: <strong>{{ costos.unit_cost | clp }}</strong></span>
+            <span>CDU real: <strong>{{ costos.real_unit_cost | clp }}</strong></span>
+        </div>
+    </div>
+
+    <div class="relative overflow-x-auto">
+        <table class="w-full min-w-[64rem] text-left">
+            <thead class="border-y border-gray-100 bg-gray-50">
+                <tr>
+                    <th class="th">Recurso</th>
+                    <th class="th">Unidad</th>
+                    <th class="th text-right">Cantidad</th>
+                    <th class="th text-right">Precio unitario</th>
+                    <th class="th text-right">Costo parcial</th>
+                    <th class="th text-right">Parcial real</th>
+                    <th class="th"><span class="sr-only">Acciones</span></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for grupo in costos.categorias %}
+                <tr class="bg-gray-50">
+                    <td colspan="4" class="td">
+                        <span class="font-bold text-sefel-black">{{ grupo.categoria }}</span>
+                        <span class="ml-2 text-sm text-neutral-500">
+                            ({{ grupo.cantidad_recursos }} recurso{{ '' if grupo.cantidad_recursos == 1 else 's' }})
+                        </span>
+                    </td>
+                    <td class="td whitespace-nowrap text-right font-bold">{{ grupo.cotizado | clp }}</td>
+                    <td class="td whitespace-nowrap text-right font-bold">{{ grupo.real | clp }}</td>
+                    <td class="td"></td>
+                </tr>
+
+                {% for linea in costos.recursos if linea.material.category.value == grupo.categoria %}
+                {% set detalle = linea.detalle %}
+                {% set material = linea.material %}
+                <tr id="recurso-{{ detalle.id }}" class="hover:bg-gray-50/70">
+                    <td class="td">
+                        <span class="font-semibold text-sefel-black">{{ material.code }}</span>
+                        <span class="block text-sm text-neutral-500">
+                            {{ material.name }}
+                            {% if not material.is_active %}
+                                <span class="badge ml-2" title="El recurso fue desactivado en la base de datos: sigue en esta receta">Inactivo</span>
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td class="td">
+                        <input form="editar-recurso-{{ detalle.id }}" name="unit" type="text" maxlength="30" required
+                               value="{{ detalle.unit }}" class="field w-24" aria-label="Unidad">
+                    </td>
+                    <td class="td text-right">
+                        <input form="editar-recurso-{{ detalle.id }}" name="cantidad" type="number" min="0.0001" step="any" required
+                               value="{{ detalle.cantidad | cantidad(para_input=true) }}" class="field w-32 text-right" aria-label="Cantidad">
+                    </td>
+                    <td class="td whitespace-nowrap text-right text-neutral-700">{{ material.unit_cost | clp }}</td>
+                    <td class="td whitespace-nowrap text-right font-bold text-sefel-black">{{ linea.parcial | clp }}</td>
+                    <td class="td whitespace-nowrap text-right {{ 'text-red-700' if linea.parcial_real > linea.parcial else 'text-neutral-700' }}">
+                        {{ linea.parcial_real | clp }}
+                    </td>
+                    <td class="td">
+                        <div class="flex justify-end gap-2">
+                            <form id="editar-recurso-{{ detalle.id }}" method="post"
+                                  action="/apu/{{ apu.id }}/recursos/{{ detalle.id }}"
+                                  hx-post="/apu/{{ apu.id }}/recursos/{{ detalle.id }}"
+                                  hx-target="#receta-apu" hx-swap="innerHTML">
+                                <button type="submit" class="btn btn-outline">Guardar</button>
+                            </form>
+                            <form method="post"
+                                  action="/apu/{{ apu.id }}/recursos/{{ detalle.id }}/eliminar"
+                                  hx-post="/apu/{{ apu.id }}/recursos/{{ detalle.id }}/eliminar"
+                                  hx-target="#receta-apu" hx-swap="innerHTML"
+                                  hx-confirm="¿Quitar {{ material.code }} de la receta? El recurso sigue en la base de datos.">
+                                <button type="submit" class="btn btn-outline" aria-label="Quitar {{ material.code }}">Quitar</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+
+                {% if not costos.recursos %}
+                <tr>
+                    <td colspan="7" class="td py-8 text-center text-neutral-500">
+                        Este APU todavía no tiene recursos: búscalos arriba para armar la receta.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+            <tfoot class="border-t border-gray-200">
+                <tr>
+                    <td colspan="4" class="td font-bold text-sefel-black">Costo directo unitario (CDU) por {{ apu.unit }}</td>
+                    <td class="td whitespace-nowrap text-right font-extrabold text-sefel-black">{{ costos.unit_cost | clp }}</td>
+                    <td class="td whitespace-nowrap text-right font-extrabold text-sefel-black">{{ costos.real_unit_cost | clp }}</td>
+                    <td class="td"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</section>

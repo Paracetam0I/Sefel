@@ -1,0 +1,90 @@
+{% if error %}
+    <div class="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+        {{ error }}
+    </div>
+{% endif %}
+
+{# material puede ser el modelo (editar) o el dict del formulario (tras un error) #}
+{% set categoria_actual = '' %}
+{% if material and material.category %}
+    {% set categoria_actual = material.category.value if material.category.value is defined else material.category %}
+{% endif %}
+
+<form
+    method="post"
+    action="{{ '/base-datos/' ~ material.id if modo == 'editar' else '/base-datos' }}"
+    hx-post="{{ '/base-datos/' ~ material.id if modo == 'editar' else '/base-datos' }}"
+    hx-target="#modal-contenido"
+    hx-swap="innerHTML"
+>
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+
+        <div>
+            <label for="code" class="label">Código</label>
+            <input id="code" name="code" type="text"
+                   value="{{ material.code if material else '' }}"
+                   maxlength="50"
+                   pattern="{{ REGLAS_HTML.texto.patron }}"
+                   title="{{ REGLAS_HTML.texto.ayuda }}"
+                   required class="field w-full uppercase">
+        </div>
+
+        <div>
+            <label for="name" class="label">Nombre</label>
+            <input id="name" name="name" type="text"
+                   value="{{ material.name if material else '' }}"
+                   maxlength="150"
+                   pattern="{{ REGLAS_HTML.texto.patron }}"
+                   title="{{ REGLAS_HTML.texto.ayuda }}"
+                   required class="field w-full">
+        </div>
+
+        <div>
+            <label for="category" class="label">Categoría</label>
+            <select id="category" name="category" required class="field select w-full">
+                <option value="" {% if not categoria_actual %}selected{% endif %} disabled>Selecciona una categoría</option>
+                {% for opcion in categorias_recurso %}
+                    <option value="{{ opcion }}" {% if categoria_actual == opcion %}selected{% endif %}>{{ opcion }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="unit" class="label">Unidad</label>
+            <input id="unit" name="unit" type="text"
+                   value="{{ material.unit if material else '' }}"
+                   maxlength="30" required class="field w-full"
+                   placeholder="Ej. kg, m³, HH, día">
+        </div>
+
+        <div>
+            <label for="unit_cost" class="label">Precio unitario (CLP)</label>
+            <input id="unit_cost" name="unit_cost" type="number"
+                   value="{{ material.unit_cost if material and material.unit_cost is not none else '' }}"
+                   min="0" step="1" required class="field w-full">
+            <p class="mt-1 text-xs text-neutral-500">Precio cotizado. Los APU que usan el recurso se recalculan solos.</p>
+        </div>
+
+        <div>
+            <label for="real_unit_cost" class="label">Costo real (CLP)</label>
+            <input id="real_unit_cost" name="real_unit_cost" type="number"
+                   value="{{ material.real_unit_cost if material and material.real_unit_cost is not none else '' }}"
+                   min="0" step="1" class="field w-full"
+                   placeholder="Igual al precio unitario si se deja vacío">
+            <p class="mt-1 text-xs text-neutral-500">Precio que finalmente se paga.</p>
+        </div>
+
+        <div class="sm:col-span-2">
+            <label for="description" class="label">Descripción</label>
+            <textarea id="description" name="description" rows="3" maxlength="500"
+                      class="field w-full">{{ material.description if material and material.description else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="mt-6 flex justify-end gap-3 border-t border-gray-100 pt-5">
+        <button type="button" class="btn btn-outline" @click="$dispatch('cerrar-modal-material')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">
+            {{ "Guardar cambios" if modo == "editar" else "Guardar recurso" }}
+        </button>
+    </div>
+</form>

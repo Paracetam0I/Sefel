@@ -37,3 +37,14 @@ def iniciales(nombre: str | None) -> str:
     """'Javier Muñoz' -> 'JM'."""
     partes = (nombre or "").split()[:2]
     return "".join(p[0] for p in partes).upper() or "?"
+
+
+def formatearCantidad(valor: int | float | None, *, para_input: bool = False) -> str:
+    """Cantidad de un recurso sin ceros de sobra (hasta 4 decimales).
+
+    0.35 -> '0,35' (o '0.35' para un <input type="number">); 2.0 -> '2'.
+    """
+    if valor is None:
+        return "" if para_input else "—"
+    texto = f"{valor:.4f}".rstrip("0").rstrip(".")
+    return texto if para_input else texto.replace(".", ",")

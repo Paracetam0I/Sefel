@@ -7,6 +7,8 @@ from app.core.db import getSession
 from app.core.security import hashPassword
 from app.main import app
 from app.models.apu import APU
+from app.models.detalle_apu import DetalleApu
+from app.models.material import CategoriaRecurso, Material
 from app.models.user import User, UserRole
 
 
@@ -79,3 +81,43 @@ def logged_in_client(client, user):
     )
     assert response.status_code == 303
     return client
+
+
+@pytest.fixture
+def crear_apu(session):
+    """Crea un APU con receta de 1 recurso, para que su CDU sea el indicado.
+
+    crear_apu("A-1", 1000, 1200) -> APU con CDU cotizado 1000 y real 1200.
+    Con con_recursos=False el APU queda sin receta (costo 0).
+    """
+    def crear(
+        code="APU-001",
+        unit_cost=1000,
+        real_unit_cost=None,
+        *,
+        name=None,
+        unit="m3",
+        category=None,
+        is_active=True,
+        con_recursos=True,
+    ):
+        apu = APU(
+            code=code, name=name or f"APU {code}", unit=unit,
+            category=category, is_active=is_active,
+        )
+        session.add(apu)
+        session.flush()
+        if con_recursos:
+            material = Material(
+                code=f"REC-{code}", name=f"Recurso {code}", unit=unit,
+                category=CategoriaRecurso.MATERIALES, unit_cost=unit_cost,
+                real_unit_cost=unit_cost if real_unit_cost is None else real_unit_cost,
+            )
+            session.add(material)
+            session.flush()
+            session.add(DetalleApu(id_apu=apu.id, id_material=material.id, unit=unit, cantidad=1))
+        session.commit()
+        session.refresh(apu)
+        return apu
+
+    return crear

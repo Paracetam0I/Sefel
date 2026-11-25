@@ -1,6 +1,6 @@
 # SEFEL · Presupuestación y precios unitarios
 
-Herramienta de escritorio de **SEFEL Ingeniería & Construcción** para administrar el catálogo de APU (análisis de precios unitarios), armar presupuestos con costos cotizados y reales, aplicar gastos generales, utilidad e IVA, y exportar cotizaciones en PDF.
+Herramienta de escritorio de **SEFEL Ingeniería & Construcción** para administrar la base de datos de recursos (materiales, mano de obra, equipos y herramientas), armar APU (análisis de precios unitarios) como recetas de esos recursos, armar presupuestos con costos cotizados y reales, aplicar gastos generales, utilidad e IVA, y exportar cotizaciones en PDF.
 
 **Stack:** FastAPI · SQLModel/SQLAlchemy · Alembic · SQLite · Jinja2 + HTMX + Alpine.js · Tailwind CSS · ReportLab · pywebview (ventana de escritorio).
 
@@ -136,11 +136,11 @@ Todas las seeds son **idempotentes**: se identifican por código/usuario y no du
 
 ```powershell
 python -m scripts.seed_admin          # 4 usuarios de prueba (--create-tables crea las tablas; --update-passwords resetea claves)
-python -m scripts.seed_apus           # catálogo de 17 APU en 7 categorías (uno inactivo)
+python -m scripts.seed_apus           # 29 recursos de la base de datos + 17 APU con su receta (un recurso y un APU inactivos)
 python -m scripts.seed_presupuestos   # 3 presupuestos con ítems y porcentajes (siembra los APU si faltan)
 ```
 
-- **APU** (`scripts/seed_apus.py`): obras preliminares, movimiento de tierra, obra gruesa, pavimentos, terminaciones, instalaciones y obras finales, con costo cotizado y real.
+- **Base de datos y APU** (`scripts/seed_apus.py`): recursos en las 4 categorías fijas y APU de obras preliminares, movimiento de tierra, obra gruesa, pavimentos, terminaciones, instalaciones y obras finales. El costo de cada APU no se siembra: se calcula con su receta.
 - **Presupuestos** (`scripts/seed_presupuestos.py`): `PRE-2026-001` (activo), `PRE-2026-002` (borrador) y `PRE-2026-003` (cerrado), a nombre del usuario `presupuestos` (o del primer ADMIN). Sus totales se calculan con la misma lógica que la app. Requiere haber corrido `seed_admin`.
 
 Para tenerlo todo de una vez: `python -m scripts.iniciar --demo`.
@@ -179,7 +179,8 @@ Los roles por módulo están en `app/core/permisos.py` y se validan en el **back
 | Módulo | Roles con acceso |
 |---|---|
 | Dashboard | Todos los autenticados (cada bloque según el rol) |
-| APU | `MATERIALS`, `BOTH`, `ADMIN` |
+| Base de datos (recursos) | `MATERIALS`, `BOTH`, `ADMIN` |
+| APU (recetas) | `MATERIALS`, `BOTH`, `ADMIN` |
 | Presupuestos | `BUDGETS`, `BOTH`, `ADMIN` (todo) · `VIEWER` (solo ver y exportar) |
 | Usuarios | `ADMIN` |
 
@@ -188,8 +189,9 @@ No hay exclusividad por creador: los roles de edición trabajan sobre todos los 
 ## 8. Cómo funciona
 
 ### Costos cotizados y reales
-- **APU:** `unit_cost` es el costo cotizado; `real_unit_cost`, el costo real (si se deja vacío, parte igual al cotizado).
-- **Ítems del presupuesto:** guardan una copia de ambos costos; el servidor calcula `subtotal = cantidad × cotizado` y `real_subtotal = cantidad × real`. Se agregan y editan en `/presupuestos/{id}/items/nuevo` (ícono **+** en el listado).
+- **Base de datos** (`/base-datos`, tabla `materiales`): cada recurso tiene categoría fija (Materiales, Mano de obra, Equipos o Herramientas), `unit_cost` (precio cotizado) y `real_unit_cost` (costo real; si se deja vacío, parte igual al cotizado). Un recurso no se elimina: se desactiva, y un recurso inactivo no se puede agregar a un APU.
+- **APU** (`/apu/{id}`, tabla `detalles_apu`): es una receta. No guarda costo: su **CDU** = suma de `cantidad × precio` de cada recurso (cada parcial redondeado al peso), cotizado y real, con subtotales por categoría. Si cambia el precio de un recurso, el CDU cambia solo.
+- **Ítems del presupuesto:** al agregar un APU se copia su CDU (cotizado y real); no se ingresa a mano. Si después cambia un recurso, el presupuesto no se mueve hasta usar **Actualizar precio** en el ítem. El costo real del ítem se puede editar; el servidor calcula `subtotal = cantidad × cotizado` y `real_subtotal = cantidad × real`. Se agregan y editan en `/presupuestos/{id}/items/nuevo` (ícono **+** en el listado).
 
 ### Porcentajes y totales del presupuesto
 Se recalculan en `app/core/calculos.py` cada vez que cambia un ítem o un porcentaje, con el formato de la cotización:

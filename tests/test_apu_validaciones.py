@@ -23,7 +23,6 @@ def datos_validos(**cambios):
         "name": "Excavación",
         "unit": "m3",
         "category": "",
-        "unit_cost": "10000",
         "description": "",
     }
     datos.update(cambios)
@@ -45,14 +44,10 @@ def test_unidad_obligatoria():
     assert error == "La unidad es obligatoria y no puede estar vacío."
 
 
-def test_costo_no_negativo():
-    _, error = _validar(datos_validos(unit_cost="-1"))
-    assert error == "El precio unitario no puede ser negativo."
-
-
-def test_costo_debe_ser_entero():
-    _, error = _validar(datos_validos(unit_cost="abc"))
-    assert error == "El precio unitario debe ser un número entero."
+def test_apu_valido_no_lleva_costos():
+    datos, error = _validar(datos_validos())
+    assert error is None
+    assert "unit_cost" not in datos and "real_unit_cost" not in datos
 
 
 @pytest.mark.parametrize(
@@ -89,7 +84,6 @@ def test_codigo_duplicado_sin_distinguir_mayusculas(session):
         code="APU-001",
         name="Excavación",
         unit="m3",
-        unit_cost=10000,
     )
     session.add(apu)
     session.commit()
@@ -106,7 +100,6 @@ def test_edicion_no_detecta_su_propio_codigo_como_duplicado(session):
         code="APU-001",
         name="Excavación",
         unit="m3",
-        unit_cost=10000,
     )
     session.add(apu)
     session.commit()

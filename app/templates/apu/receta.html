@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "partials/ui.html" import encabezado %}
+
+{% block title %}APU {{ apu.code }}{% endblock title %}
+
+{% block content %}
+{% call encabezado("APU " ~ apu.code ~ " · " ~ apu.name,
+                   "Receta del APU por " ~ apu.unit ~ (" · " ~ apu.category if apu.category else "")
+                   ~ ". El costo directo unitario (CDU) se calcula con los recursos de la base de datos.") %}
+    <a href="/apu" class="btn btn-outline">Volver</a>
+{% endcall %}
+
+{% if not apu.is_active %}
+<p class="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-800" role="status">
+    Este APU está inactivo: no se puede agregar a presupuestos nuevos.
+</p>
+{% endif %}
+
+<div id="receta-apu">
+    {% include "partials/apu/receta.html" %}
+</div>
+{% endblock content %}

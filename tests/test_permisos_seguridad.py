@@ -179,7 +179,7 @@ def test_sidebar_muestra_solo_modulos_permitidos(client, session):
 
 def test_dashboard_admin_ve_datos_reales_de_todos_los_modulos(client, session, presupuesto):
     loginComo(client, session, UserRole.ADMIN)
-    session.add(APU(code="A-1", name="Excavación manual", unit="m3", unit_cost=1000, real_unit_cost=1100))
+    session.add(APU(code="A-1", name="Excavación manual", unit="m3"))
     session.commit()
 
     html = client.get("/dashboard").text

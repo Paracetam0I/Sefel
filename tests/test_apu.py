@@ -8,7 +8,6 @@ DATOS_APU = {
     "name": "Hormigón H25",
     "unit": "m3",
     "category": "Obra gruesa",
-    "unit_cost": "85000",
     "description": "APU de prueba",
 }
 
@@ -25,7 +24,7 @@ def test_crear_apu(logged_in_client, session):
 
     assert apu is not None
     assert apu.name == "Hormigón H25"
-    assert apu.unit_cost == 85000
+    assert apu.recursos == []          # la receta se arma después, en /apu/{id}
 
 
 def test_editar_apu(logged_in_client, session):
@@ -37,7 +36,6 @@ def test_editar_apu(logged_in_client, session):
     datos = {
         **DATOS_APU,
         "name": "Hormigón H30",
-        "unit_cost": "95000",
     }
 
     response = logged_in_client.post(
@@ -51,7 +49,6 @@ def test_editar_apu(logged_in_client, session):
 
     session.refresh(apu)
     assert apu.name == "Hormigón H30"
-    assert apu.unit_cost == 95000
 
 
 def test_rechazar_codigo_duplicado_al_crear(logged_in_client, session):
@@ -103,13 +100,13 @@ def test_rechazar_nombre_vacio(logged_in_client):
     assert "nombre" in response.text.lower()
 
 
-def test_rechazar_costo_negativo(logged_in_client):
-    datos = {**DATOS_APU, "unit_cost": "-100"}
+def test_el_formulario_de_apu_ya_no_pide_costos(logged_in_client):
+    # El costo del APU se calcula con sus recursos: no se ingresa a mano
+    formulario = logged_in_client.get("/apu/nuevo", headers={"HX-Request": "true"}).text
 
-    response = logged_in_client.post("/apu", data=datos)
-
-    assert response.status_code == 400
-    assert "negativo" in response.text.lower()
+    assert 'name="unit_cost"' not in formulario
+    assert 'name="real_unit_cost"' not in formulario
+    assert "/base-datos" in formulario
 
 
 

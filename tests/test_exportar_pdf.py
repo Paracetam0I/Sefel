@@ -25,7 +25,7 @@ def presupuesto(session, user):
     session.commit()
     session.refresh(p)
 
-    apu = APU(code="A-1", name="Radier G-20", unit="m2", unit_cost=45000, real_unit_cost=49620)
+    apu = APU(code="A-1", name="Radier G-20", unit="m2")
     session.add(apu)
     session.commit()
     session.refresh(apu)

@@ -13,6 +13,11 @@ from app.core.dependencies import requireRoles
 from app.models.user import User, UserRole
 
 ROLES_USUARIOS = (UserRole.ADMIN,)
+# Base de datos de recursos (encargado de recursos). Informe 2, 6.1.
+ROLES_MATERIALES = (UserRole.MATERIALS, UserRole.BOTH, UserRole.ADMIN)
+# APU (recetas). Se mantienen los roles que ya tenía el módulo. Según el
+# Informe 2 (6.1) los APU los arma el encargado de presupuestos: para eso,
+# cambiar a (UserRole.BUDGETS, UserRole.BOTH, UserRole.ADMIN).
 ROLES_APU = (UserRole.MATERIALS, UserRole.BOTH, UserRole.ADMIN)
 # VIEWER: solo lectura y exportar
 ROLES_PRESUPUESTOS_LECTURA = (
@@ -22,6 +27,7 @@ ROLES_PRESUPUESTOS_EDICION = (UserRole.BUDGETS, UserRole.BOTH, UserRole.ADMIN)
 
 PERMISOS = {
     "usuarios": ROLES_USUARIOS,
+    "materiales": ROLES_MATERIALES,
     "apu": ROLES_APU,
     "presupuestos": ROLES_PRESUPUESTOS_LECTURA,
     "presupuestos_edicion": ROLES_PRESUPUESTOS_EDICION,

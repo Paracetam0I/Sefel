@@ -41,10 +41,13 @@ class DetallePresupuesto(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
 
     # --- FKs ---
+    # Al borrar el presupuesto se borran sus líneas
     id_presupuesto: int = Field(
         foreign_key="presupuesto.id_presupuesto",
+        ondelete="CASCADE",
         nullable=False,
     )
+    # El APU (receta) del que sale la línea. Un APU no se borra: se desactiva.
     id_apu: int = Field(
         foreign_key="apu.id",
         nullable=False,
@@ -53,12 +56,14 @@ class DetallePresupuesto(SQLModel, table=True):
     unit: str = Field(max_length=30, nullable=False)
     cantidad: int = Field(default=1, nullable=False, ge=1)
 
-    # Valores cotizados (estimados)
-    estimated_unit_cost: int = Field(nullable=False, ge=0)  # snapshot de APU.unit_cost
+    # Valores cotizados (estimados). Los precios unitarios son una COPIA del
+    # costo calculado del APU al agregar la línea (o al "Actualizar precio"):
+    # si después cambia el precio de un recurso, el presupuesto no se mueve.
+    estimated_unit_cost: int = Field(nullable=False, ge=0)  # snapshot del CDU cotizado del APU
     subtotal: int = Field(nullable=False, ge=0)             # cantidad * estimated_unit_cost
 
     # Valores reales (lo que finalmente se paga)
-    real_unit_cost: int = Field(                             # snapshot de APU.real_unit_cost
+    real_unit_cost: int = Field(                             # snapshot del CDU real del APU
         default=0,
         nullable=False,
         ge=0,

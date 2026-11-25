@@ -3,11 +3,13 @@ from datetime import datetime
 
 import pytest
 from alembic import command
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.core import inicializacion
 from app.core.validaciones import validarCodigo
 from app.models.apu import APU
+from app.models.material import Material
 from app.models.presupuesto import Presupuesto
 from tests.test_seeds_inicio import bd_temporal  # noqa: F401  (fixture de BD temporal)
 
@@ -15,7 +17,7 @@ HTMX = {"HX-Request": "true"}
 
 
 def datosApu(**cambios):
-    datos = {"code": "og_01-a", "name": "Hormigón", "unit": "m3", "unit_cost": "1000"}
+    datos = {"code": "og_01-a", "name": "Hormigón", "unit": "m3"}
     datos.update(cambios)
     return datos
 
@@ -75,7 +77,11 @@ def test_migracion_pasa_a_mayusculas_los_codigos_existentes(bd_temporal):  # noq
     command.downgrade(config, "59241f60df74")         # BD de la versión anterior
 
     with Session(bd_temporal) as s:
-        s.add(APU(code="og-ñ1", name="x", unit="m", unit_cost=1, real_unit_cost=1))
+        # Esquema de esa versión (APU con costo propio): SQL directo, no el modelo actual
+        s.connection().execute(text(
+            "INSERT INTO apu (code, name, unit, unit_cost, real_unit_cost, is_active, created_at) "
+            "VALUES ('og-ñ1', 'x', 'm', 1, 1, 1, '2026-01-01 00:00:00')"
+        ))
         s.add(Presupuesto(id_usuario=1, code="pre-año", client_name="C", estimate_income=1,
                           start_date=datetime(2026, 3, 1), end_date=datetime(2026, 4, 1), description="d"))
         s.commit()
@@ -84,4 +90,6 @@ def test_migracion_pasa_a_mayusculas_los_codigos_existentes(bd_temporal):  # noq
 
     with Session(bd_temporal) as s:
         assert s.exec(select(APU.code)).one() == "OG-Ñ1"
+        # La migración a "APU como receta" lo convirtió en recurso + receta
+        assert s.exec(select(Material.code)).one() == "OG-Ñ1"
         assert s.exec(select(Presupuesto.code)).one() == "PRE-AÑO"

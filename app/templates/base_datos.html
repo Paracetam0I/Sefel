@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "partials/ui.html" import icono, encabezado %}
+
+{% block title %}Base de datos{% endblock title %}
+
+{% block content %}
+<div
+    x-data="{ modalAbierto: false }"
+    @abrir-modal-material.window="modalAbierto = true"
+    @cerrar-modal-material.window="modalAbierto = false"
+    @keydown.escape.window="modalAbierto = false"
+>
+{% call encabezado("Base de datos", "Recursos con su precio unitario: materiales, mano de obra, equipos y herramientas. Los APU se arman con ellos.") %}
+    <button
+        type="button"
+        class="btn btn-primary"
+        hx-get="/base-datos/nuevo"
+        hx-target="#modal-contenido"
+        hx-swap="innerHTML"
+        @click="modalAbierto = true"
+    >
+        {{ icono("mas") }} Agregar recurso
+    </button>
+{% endcall %}
+
+<section class="card mt-8 overflow-hidden">
+
+    {# Filtros #}
+    <form
+        method="get"
+        action="/base-datos"
+        class="flex flex-wrap items-center gap-3 p-5"
+        role="search"
+        hx-get="/base-datos"
+        hx-target="#contenido-base-datos"
+        hx-swap="innerHTML"
+    >
+        <div class="relative min-w-64 flex-1">
+            <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-neutral-400">{{ icono("buscar") }}</span>
+            <input
+                type="search"
+                name="q"
+                value="{{ q }}"
+                placeholder="Buscar por código o nombre..."
+                class="field w-full pl-10"
+            >
+        </div>
+
+        {# Categorías FIJAS: vienen del sistema, no de los datos #}
+        <select name="categoria" class="field select w-52" aria-label="Categoría">
+            <option value="">Categoría: Todas</option>
+            {% for opcion in categorias_recurso %}
+                <option value="{{ opcion }}" {% if categoria == opcion %}selected{% endif %}>{{ opcion }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="estado" class="field select w-52" aria-label="Estado">
+            <option value="" {% if not estado %}selected{% endif %}>Estado: Todos</option>
+            <option value="activo" {% if estado == "activo" %}selected{% endif %}>Activo</option>
+            <option value="inactivo" {% if estado == "inactivo" %}selected{% endif %}>Inactivo</option>
+        </select>
+
+        <button type="submit" class="btn btn-outline">
+            {{ icono("buscar") }} Filtrar
+        </button>
+
+        {% if q or categoria or estado %}
+            <a href="/base-datos" class="btn btn-outline">Limpiar</a>
+        {% endif %}
+    </form>
+
+    <div id="contenido-base-datos">
+        {% include "partials/base_datos/tabla.html" %}
+    </div>
+</section>
+
+    {# Modal crear / editar #}
+    <div
+        x-show="modalAbierto"
+        x-transition.opacity
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        @click.self="modalAbierto = false"
+    >
+        <section class="card w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6">
+            <div class="mb-5 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-sefel-black">Recurso</h2>
+                <button type="button" class="btn btn-outline" @click="modalAbierto = false" aria-label="Cerrar modal">
+                    Cerrar
+                </button>
+            </div>
+            <div id="modal-contenido"></div>
+        </section>
+    </div>
+</div>
+{% endblock content %}

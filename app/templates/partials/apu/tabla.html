@@ -16,23 +16,26 @@
                 <th class="th">Nombre</th>
                 <th class="th">Categoría</th>
                 <th class="th">Unidad</th>
-                <th class="th text-right">Costo cotizado</th>
-                <th class="th text-right">Costo real</th>
+                <th class="th text-right">Recursos</th>
+                <th class="th text-right">CDU cotizado</th>
+                <th class="th text-right">CDU real</th>
                 <th class="th">Actualizado</th>
                 <th class="th">Estado</th>
-                <th class="th text-right">Editar</th>
+                <th class="th text-right">Acciones</th>
             </tr>
         </thead>
 
         <tbody class="divide-y divide-gray-100">
             {% for apu in apus %}
+            {# CDU = suma de cantidad × precio de los recursos de la receta #}
+            {% set costo = costos.get(apu.id, costo_vacio) %}
             <tr id="apu-{{ apu.id }}" class="{{ '' if apu.is_active else 'opacity-55' }} {{ 'fila-nueva' if apu.id == resaltar_id else '' }} hover:bg-gray-50/70">
                 <td class="td whitespace-nowrap text-neutral-500">
                     {{ apu.code }}
                 </td>
 
                 <td class="td font-bold text-sefel-black">
-                    {{ apu.name }}
+                    <a href="/apu/{{ apu.id }}" class="hover:text-sefel-red hover:underline" title="Ver receta del APU">{{ apu.name }}</a>
                 </td>
 
                 <td class="td text-neutral-700">
@@ -43,13 +46,18 @@
                     {{ apu.unit }}
                 </td>
 
-                <td class="td whitespace-nowrap text-right font-bold text-sefel-black">
-                    {{ apu.unit_cost | clp }}
+                <td class="td whitespace-nowrap text-right {{ 'text-neutral-500' if costo.recursos else 'text-red-700' }}"
+                    {% if not costo.recursos %}title="Sin recursos: agrégalos en la receta"{% endif %}>
+                    {{ costo.recursos }}
                 </td>
 
-                <td class="td whitespace-nowrap text-right {{ 'text-red-700' if apu.real_unit_cost > apu.unit_cost else 'text-neutral-700' }}"
-                    {% if apu.real_unit_cost > apu.unit_cost %}title="El costo real supera al cotizado"{% endif %}>
-                    {{ apu.real_unit_cost | clp }}
+                <td class="td whitespace-nowrap text-right font-bold text-sefel-black">
+                    {{ costo.unit_cost | clp }}
+                </td>
+
+                <td class="td whitespace-nowrap text-right {{ 'text-red-700' if costo.real_unit_cost > costo.unit_cost else 'text-neutral-700' }}"
+                    {% if costo.real_unit_cost > costo.unit_cost %}title="El costo real supera al cotizado"{% endif %}>
+                    {{ costo.real_unit_cost | clp }}
                 </td>
 
                 <td class="td text-neutral-500">
@@ -76,7 +84,15 @@
                 </td>
 
                 <td class="td">
-                    <div class="flex justify-end text-neutral-500">
+                    <div class="flex justify-end gap-3 text-neutral-500">
+                        <a
+                            href="/apu/{{ apu.id }}"
+                            class="hover:text-sefel-red"
+                            aria-label="Receta del APU {{ apu.code }}"
+                            title="Receta (recursos)"
+                        >
+                            {{ icono("ver", "size-[18px]") }}
+                        </a>
                         <a
                             href="/apu/{{ apu.id }}/editar"
                             hx-get="/apu/{{ apu.id }}/editar"
@@ -95,7 +111,7 @@
 
             {% else %}
             <tr>
-                <td colspan="9" class="td py-10 text-center text-neutral-500">
+                <td colspan="10" class="td py-10 text-center text-neutral-500">
                     {% if q or categoria or estado %}
                         No se encontraron APU con los filtros seleccionados.
                     {% else %}

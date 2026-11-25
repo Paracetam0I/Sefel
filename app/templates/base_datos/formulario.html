@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}{{ "Editar recurso" if modo == "editar" else "Nuevo recurso" }}{% endblock title %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold tracking-tight text-sefel-black">
+        {{ "Editar recurso" if modo == "editar" else "Nuevo recurso" }}
+    </h1>
+    <p class="mt-1.5 text-[15px] text-neutral-500">
+        Completa los datos del recurso de la base de datos.
+    </p>
+</div>
+
+<section class="card max-w-3xl p-6">
+    {% include "partials/base_datos/formulario.html" %}
+</section>
+{% endblock content %}

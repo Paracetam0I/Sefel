@@ -16,9 +16,10 @@ from app.core.validaciones import (
     validarTexto,
 )
 from app.models.apu import APU, APUValidacion
+from app.models.material import MaterialValidacion
 from app.models.presupuesto import Presupuesto, PresupuestoValidacion
 from app.models.user import User, UserRole
-from scripts.seed_apus import SEED_APUS
+from scripts.seed_apus import SEED_APUS, SEED_MATERIALES
 from scripts.seed_presupuestos import SEED_PRESUPUESTOS
 
 HTMX = {"HX-Request": "true"}
@@ -58,7 +59,7 @@ def datosPresupuesto(**cambios):
 
 def datosApu(**cambios):
     datos = {"code": "OG_01-A", "name": "Hormigón H25", "unit": "m3",
-             "category": "Obra gruesa", "unit_cost": "1000"}
+             "category": "Obra gruesa"}
     datos.update(cambios)
     return datos
 
@@ -181,7 +182,7 @@ def test_escritorio_permite_descargas_en_webview():
 
 def test_apu_creado_aparece_primero_y_resaltado_aunque_haya_muchos(logged_in_client, session):
     for i in range(15):
-        session.add(APU(code=f"A-{i:02d}", name="x", unit="m", unit_cost=1, real_unit_cost=1))
+        session.add(APU(code=f"A-{i:02d}", name="x", unit="m"))
     session.commit()
 
     respuesta = logged_in_client.post("/apu", data=datosApu(code="ZZ-NUEVO"), headers=HTMX)
@@ -192,11 +193,11 @@ def test_apu_creado_aparece_primero_y_resaltado_aunque_haya_muchos(logged_in_cli
 
 
 def test_apu_editado_se_muestra_en_su_pagina(logged_in_client, session):
-    viejo = APU(code="VIEJO-1", name="x", unit="m", unit_cost=1, real_unit_cost=1,
+    viejo = APU(code="VIEJO-1", name="x", unit="m",
                 created_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     session.add(viejo)
     for i in range(12):
-        session.add(APU(code=f"N-{i:02d}", name="x", unit="m", unit_cost=1, real_unit_cost=1))
+        session.add(APU(code=f"N-{i:02d}", name="x", unit="m"))
     session.commit()
 
     respuesta = logged_in_client.post(f"/apu/{viejo.id}", data=datosApu(code="VIEJO-1"), headers=HTMX)
@@ -343,7 +344,7 @@ def test_presupuesto_acepta_tildes_enie_guiones_puntos_y_comas(logged_in_client,
 @pytest.mark.parametrize("valor", ["A.1", "A,1", "A@1", "A/B", "e=10", "A&B"])
 @pytest.mark.parametrize("ruta", ["crear", "editar"])
 def test_apu_rechaza_simbolos(logged_in_client, session, campo, etiqueta, valor, ruta):
-    apu = APU(code="EXISTE", name="x", unit="m", unit_cost=1, real_unit_cost=1)
+    apu = APU(code="EXISTE", name="x", unit="m")
     session.add(apu)
     session.commit()
     url = "/apu" if ruta == "crear" else f"/apu/{apu.id}"
@@ -392,9 +393,11 @@ def test_columna_y_campo_se_llaman_nombre(logged_in_client, session):
 # ==========================================
 
 def test_las_seeds_cumplen_las_validaciones():
+    for m in SEED_MATERIALES:
+        MaterialValidacion(code=m.code, name=m.name, unit=m.unit, category=m.category,
+                           unit_cost=m.unit_cost, real_unit_cost=m.real_unit_cost)
     for a in SEED_APUS:
-        APUValidacion(code=a.code, name=a.name, unit=a.unit, category=a.category,
-                      unit_cost=a.unit_cost, real_unit_cost=a.real_unit_cost)
+        APUValidacion(code=a.code, name=a.name, unit=a.unit, category=a.category)
     for p in SEED_PRESUPUESTOS:
         PresupuestoValidacion(code=p.code, client_name=p.client_name, estimate_income=p.estimate_income,
                               start_date=p.start_date, end_date=p.end_date, description=p.description)

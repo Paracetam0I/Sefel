@@ -3,7 +3,7 @@ import sys
 
 from fastapi.templating import Jinja2Templates
 from app.core.flash import getFlashedMessages
-from app.core.formato import etiquetaRol, formatearClp, formatearFecha, iniciales
+from app.core.formato import etiquetaRol, formatearCantidad, formatearClp, formatearFecha, iniciales
 from app.core.config import INACTIVIDAD_MAXIMA_SEGUNDOS
 from app.core.permisos import puede
 from app.core.validaciones import REGLAS_HTML
@@ -29,3 +29,4 @@ templates.env.filters["clp"] = formatearClp
 templates.env.filters["fecha"] = formatearFecha
 templates.env.filters["rol_label"] = etiquetaRol
 templates.env.filters["iniciales"] = iniciales
+templates.env.filters["cantidad"] = formatearCantidad

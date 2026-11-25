@@ -23,6 +23,9 @@
         {{ stat_card("Presupuestos activos", presupuestos.activos,
                      "Total con IVA: " ~ (presupuestos.monto_activos | clp)) }}
     {% endif %}
+    {% if materiales %}
+        {{ stat_card("Base de datos", materiales.total, materiales.activos ~ " recursos activos") }}
+    {% endif %}
     {% if apus %}
         {{ stat_card("APU", apus.total, apus.activos ~ " activos en el catálogo") }}
         {{ stat_card("APU actualizados", apus.actualizados, "En los últimos 30 días") }}
@@ -34,7 +37,7 @@
     {% endif %}
 </section>
 
-{% if not (presupuestos or apus or usuarios) %}
+{% if not (presupuestos or apus or usuarios or materiales) %}
 <p class="card mt-8 p-6 text-neutral-500">Tu rol no tiene módulos con métricas para mostrar.</p>
 {% endif %}
 
@@ -81,17 +84,17 @@
                 <tr>
                     <th class="th">Código</th>
                     <th class="th">Nombre</th>
-                    <th class="th text-right">Cotizado</th>
-                    <th class="th text-right">Real</th>
+                    <th class="th text-right">CDU cotizado</th>
+                    <th class="th text-right">CDU real</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-                {% for a in apus.recientes %}
+                {% for a, costo in apus.recientes %}
                 <tr class="{{ '' if a.is_active else 'opacity-55' }}">
                     <td class="td whitespace-nowrap text-neutral-500">{{ a.code }}</td>
                     <td class="td font-semibold text-sefel-black">{{ a.name }}</td>
-                    <td class="td whitespace-nowrap text-right">{{ a.unit_cost | clp }}</td>
-                    <td class="td whitespace-nowrap text-right">{{ a.real_unit_cost | clp }}</td>
+                    <td class="td whitespace-nowrap text-right">{{ costo.unit_cost | clp }}</td>
+                    <td class="td whitespace-nowrap text-right">{{ costo.real_unit_cost | clp }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="4" class="td py-6 text-center text-neutral-500">Aún no hay APU.</td></tr>

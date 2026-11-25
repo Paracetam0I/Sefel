@@ -1,7 +1,9 @@
 """
 Seed de presupuestos de ejemplo, con sus ítems (APU asignados) y porcentajes.
 
-- Siembra primero el catálogo de APU (scripts.seed_apus) si falta.
+- Siembra primero la base de datos de recursos y los APU (scripts.seed_apus).
+- El precio de cada ítem es el costo calculado del APU (su receta), igual que
+  al agregar un ítem desde la app.
 - Los presupuestos quedan a nombre del usuario 'presupuestos' (o del primer
   ADMIN si no existe); requiere haber corrido scripts.seed_admin.
 - Totales y montos se calculan con app.core.calculos, igual que en la app.
@@ -18,7 +20,7 @@ from datetime import datetime
 
 from sqlmodel import Session, select
 
-from app.core.calculos import calcularSubtotales, recalcularPresupuesto
+from app.core.calculos import calcularSubtotales, costoVacio, costosDeApus, recalcularPresupuesto
 from app.core.db import engine
 from app.models.apu import APU
 from app.models.detalle_presupuesto import DetallePresupuesto
@@ -104,6 +106,7 @@ def sembrarPresupuestos(session: Session) -> int:
 
     sembrarApus(session)
     apus = {a.code: a for a in session.exec(select(APU)).all()}
+    costos = costosDeApus(session)
     existentes = set(session.exec(select(Presupuesto.code)).all())
 
     creados = 0
@@ -130,13 +133,14 @@ def sembrarPresupuestos(session: Session) -> int:
 
         for codigo, cantidad in data.items:
             apu = apus[codigo]
+            costo = costos.get(apu.id, costoVacio())
             detalle = DetallePresupuesto(
                 id_presupuesto=presupuesto.id_presupuesto,
                 id_apu=apu.id,
                 unit=apu.unit,
                 cantidad=cantidad,
-                estimated_unit_cost=apu.unit_cost,     # snapshot del catálogo
-                real_unit_cost=apu.real_unit_cost,
+                estimated_unit_cost=costo["unit_cost"],     # copia del CDU del APU
+                real_unit_cost=costo["real_unit_cost"],
             )
             calcularSubtotales(detalle)
             session.add(detalle)
