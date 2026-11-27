@@ -1,3 +1,35 @@
+"""
+presupuestos.py — Presupuestos: listar, crear, editar, estado, porcentajes y PDF.
+
+EN SIMPLE
+    Es el módulo principal del negocio. Desde aquí se:
+      - Ve la lista de presupuestos (con buscador, filtro por estado y tarjetas).
+      - Crea y edita presupuestos (código, cliente, fechas, nombre...).
+      - Cambia el estado: borrador -> activo -> cerrado.
+      - Ajusta gastos generales, utilidad e IVA y se ven los montos finales.
+      - Exporta la cotización a PDF.
+    Los ítems de cada presupuesto se manejan en items.py.
+
+TÉCNICO
+    Permisos en dos niveles:
+      - Router completo: ROLES_PRESUPUESTOS_LECTURA (incluye VIEWER).
+      - Endpoints que modifican: además UsuarioPresupuestosEdicion (VIEWER -> 403).
+    Rutas:
+      GET  /presupuestos                       lista
+      GET  /presupuestos/exportar              modal para elegir cuál exportar
+      GET  /presupuestos/{id}/pdf              descarga el PDF
+      GET  /presupuestos/nuevo                 formulario crear   (edición)
+      POST /presupuestos                       crear              (edición)
+      GET  /presupuestos/{id}/editar           formulario editar  (edición)
+      POST /presupuestos/{id}                  guardar edición    (edición)
+      POST /presupuestos/{id}/estado           cambiar estado     (edición)
+      GET  /presupuestos/{id}/porcentajes      ver porcentajes y montos
+      POST /presupuestos/{id}/porcentajes      guardar porcentajes (edición)
+    Ojo con el orden: /presupuestos/exportar y /presupuestos/nuevo se declaran
+    antes que /presupuestos/{presupuesto_id}/..., pero como estas últimas
+    tienen más segmentos no chocan.
+    Mismo patrón HTMX/normal que apu.py (ver su docstring).
+"""
 from datetime import datetime, timedelta, timezone
 from math import ceil
 from urllib.parse import urlencode
@@ -49,6 +81,7 @@ def _buscar(session: Session, presupuesto_id: int, usuario) -> Presupuesto | Non
 
 
 def _resumen(todos: list[Presupuesto]) -> dict:
+    """Números de las tarjetas superiores: total, por estado y actualizados en 30 días."""
     ahora = datetime.now(timezone.utc)
 
     borradores = sum(
@@ -89,6 +122,7 @@ def _filtrar(
     q: str,
     estado: str,
 ) -> list[Presupuesto]:
+    """Filtra por texto (código o cliente) y por estado (DRAFT/ACTIVE/CLOSE)."""
     texto = q.strip().casefold()
     resultado = []
 
@@ -115,6 +149,7 @@ def _datosFormulario(
     description: str = "",
     status: str = StatusPresupuestos.DRAFT.value,
 ) -> dict:
+    """Empaqueta los campos del formulario en un dict (valores por defecto = formulario vacío)."""
     return {
         "code": code,
         "client_name": client_name,
@@ -136,6 +171,11 @@ def _normalizar_fechas(datos: dict) -> dict:
 
 
 def _validar(datos: dict) -> tuple[dict, str | None]:
+    """Valida con PresupuestoValidacion y traduce el primer error a español.
+
+    Devuelve (datos_validados, None) o (datos_escritos, mensaje_de_error).
+    Mismo enfoque que _validar() de apu.py.
+    """
     datos_limpios = _datosFormulario(
         str(datos.get("code", "")),
         str(datos.get("client_name", "")),
@@ -198,6 +238,10 @@ def _codigoExistente(
     id_usuario: int,
     excluir_id: int | None = None,
 ) -> bool:
+    """True si el código ya lo usa otro presupuesto (sin distinguir mayúsculas).
+
+    id_usuario no se usa en la consulta (queda por compatibilidad de la firma).
+    """
     # El código es único en todo el sistema (todos ven todos los presupuestos)
     consulta = select(Presupuesto).where(
         func.lower(Presupuesto.code) == code.casefold(),
@@ -208,7 +252,10 @@ def _codigoExistente(
 
 
 def _a_dict(presupuesto: Presupuesto) -> dict:
-    """Convierte el modelo a dict listo para la plantilla."""
+    """Convierte el modelo a dict listo para la plantilla.
+
+    Las fechas se pasan a "AAAA-MM-DD", el formato que exige <input type="date">.
+    """
     return {
         "id_presupuesto": presupuesto.id_presupuesto,
         "code": presupuesto.code,
@@ -239,6 +286,11 @@ def _renderFormulario(
     status_code: int = 200,
     es_htmx: bool = False,
 ):
+    """Formulario de presupuesto (fragmento para modal o página completa).
+
+    `presupuesto` puede ser None (crear), un Presupuesto (editar) o un dict
+    con lo escrito (tras un error); siempre se convierte a dict.
+    """
     if presupuesto is None:
         presupuesto = _datosFormulario()
     elif not isinstance(presupuesto, dict):
@@ -273,6 +325,12 @@ def _renderLista(
     es_htmx: bool = False,
     resaltar_id: int | None = None,
 ):
+    """Dibuja el listado (página completa, o solo la tabla si es HTMX).
+
+    resumen_oob: en HTMX, las tarjetas de arriba se actualizan "fuera de
+    banda" (hx-swap-oob): la misma respuesta trae la tabla y, aparte, las
+    tarjetas, y HTMX reemplaza cada una en su lugar.
+    """
     # Lo más reciente primero: un presupuesto recién creado aparece arriba
     todos = session.exec(
         select(Presupuesto).order_by(
@@ -343,6 +401,7 @@ def listar(
     estado: str = "",
     pagina: int = 1,
 ):
+    """GET /presupuestos (lectura: VIEWER también entra)."""
     return _renderLista(
         request,
         usuario,
@@ -380,6 +439,12 @@ def exportarPdf(
     usuario: CurrentUser,
     session: Session = Depends(getSession),
 ):
+    """GET /presupuestos/{id}/pdf: genera el PDF en memoria y lo envía como descarga.
+
+    Content-Disposition: attachment le dice al navegador "descárgalo con este
+    nombre" en vez de abrirlo. (En la ventana de escritorio el guardado lo
+    hace ApiEscritorio.guardarPdf de client.py.)
+    """
     presupuesto = _buscar(session, presupuesto_id, usuario)
     if presupuesto is None:
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
@@ -401,6 +466,7 @@ def mostrarFormulario(
     request: Request,
     usuario: UsuarioPresupuestosEdicion,
 ):
+    """GET /presupuestos/nuevo: formulario vacío (estado por defecto: borrador)."""
     return _renderFormulario(
         request,
         usuario,
@@ -423,6 +489,10 @@ def crear(
     status: str = Form(StatusPresupuestos.DRAFT.value),
     session: Session = Depends(getSession),
 ):
+    """POST /presupuestos: valida, revisa código repetido y crea el presupuesto.
+
+    Se crea sin ítems (totales en 0); el creador queda en id_usuario.
+    """
     es_htmx = request.headers.get("HX-Request") == "true"
 
     datos, error = _validar(
@@ -484,6 +554,7 @@ def mostrarEdicion(
     usuario: UsuarioPresupuestosEdicion,
     session: Session = Depends(getSession),
 ):
+    """GET /presupuestos/{id}/editar: formulario con los datos actuales."""
     presupuesto = _buscar(session, presupuesto_id, usuario)
 
     if presupuesto is None:
@@ -510,6 +581,7 @@ def actualizar(
     status: str = Form(StatusPresupuestos.DRAFT.value),
     session: Session = Depends(getSession),
 ):
+    """POST /presupuestos/{id}: guarda los datos generales y recalcula totales."""
     es_htmx = request.headers.get("HX-Request") == "true"
 
     presupuesto = _buscar(session, presupuesto_id, usuario)
@@ -586,6 +658,11 @@ def cambiarEstado(
     pagina: int = Form(1),
     session: Session = Depends(getSession),
 ):
+    """POST /presupuestos/{id}/estado: cambia a DRAFT, ACTIVE o CLOSE.
+
+    StatusPresupuestos(nuevo_estado) lanza ValueError si el texto no es un
+    estado válido (p. ej. si alguien manipula el formulario).
+    """
     es_htmx = request.headers.get("HX-Request") == "true"
     presupuesto = _buscar(session, presupuesto_id, usuario)
 
@@ -636,6 +713,7 @@ NOMBRES_PORCENTAJES = {
 
 
 def _validarPorcentajes(datos: dict) -> tuple[dict | None, str | None]:
+    """Valida el formulario de porcentajes. Devuelve (validados, None) o (None, mensaje)."""
     try:
         return PorcentajesValidacion.model_validate(datos).model_dump(), None
     except ValidationError as exc:
@@ -664,6 +742,11 @@ def _renderPorcentajes(
     guardado: bool = False,
     es_htmx: bool = False,
 ):
+    """Dibuja la vista de porcentajes: formulario + desglose de montos + totales por categoría.
+
+    Se usa en modal (HTMX) o como página propia. `guardado=True` muestra el
+    aviso de "guardado" dentro del modal.
+    """
     if datos is None:
         datos = {
             "pct_gastos_generales": presupuesto.pct_gastos_generales,
@@ -703,6 +786,7 @@ def mostrarPorcentajes(
     usuario: CurrentUser,
     session: Session = Depends(getSession),
 ):
+    """GET /presupuestos/{id}/porcentajes (lectura: VIEWER puede ver los montos)."""
     presupuesto = _buscar(session, presupuesto_id, usuario)
     if presupuesto is None:
         flash(request, "El presupuesto solicitado no existe.", "error")
@@ -726,6 +810,11 @@ def guardarPorcentajes(
     costo_neto: str = Form("0"),
     session: Session = Depends(getSession),
 ):
+    """POST /presupuestos/{id}/porcentajes: guarda % y montos fijos, y recalcula.
+
+    En HTMX responde el mismo panel actualizado y dispara el evento
+    "recargar-presupuestos" para que la tabla de fondo muestre los nuevos totales.
+    """
     es_htmx = request.headers.get("HX-Request") == "true"
     presupuesto = _buscar(session, presupuesto_id, usuario)
     if presupuesto is None:

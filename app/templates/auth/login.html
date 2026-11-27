@@ -1,3 +1,8 @@
+{#
+    auth/login.html — Formulario de inicio de sesión (GET/POST /login, main.py).
+    EN SIMPLE: usuario + contraseña. Muestra `error` (credenciales, bloqueo) o
+      `aviso` (sesión cerrada por inactividad). Envía un POST normal (sin HTMX).
+-#}
 {% extends "base.html" %}
 
 {% block title %}Iniciar sesión{% endblock title %}

@@ -1,3 +1,10 @@
+"""
+Crea un presupuesto de prueba (PRE-PRUEBA) a nombre del usuario 'presupuestos'.
+
+EN SIMPLE: deja un presupuesto vacío listo para probar la pantalla de ítems.
+Requiere haber corrido antes: python -m scripts.seed_admin
+Uso: python -m scripts.crear_presupuesto_prueba
+"""
 from datetime import datetime
 
 from sqlmodel import Session, select

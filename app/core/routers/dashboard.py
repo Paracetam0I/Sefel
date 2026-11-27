@@ -1,3 +1,18 @@
+"""
+dashboard.py — Página de resumen ("tablero") que se ve al entrar.
+
+EN SIMPLE
+    Muestra tarjetas con números clave: cuántos presupuestos hay por estado,
+    cuánto suman los activos, cuántos APU hay, cuántos usuarios están activos
+    o bloqueados, y los últimos movimientos. Cada persona ve solo las
+    tarjetas de los módulos a los que tiene acceso.
+
+TÉCNICO
+    Ruta: GET /dashboard. Hace consultas de agregación (COUNT, SUM, GROUP BY)
+    en la BD en vez de traer todas las filas a Python. Cada bloque se calcula
+    solo si puede(usuario, "...") lo permite; si no, se pasa None y la
+    plantilla no lo dibuja.
+"""
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request
@@ -18,11 +33,12 @@ from app.templates import templates
 # tiene acceso al módulo (un VIEWER no ve conteos de usuarios ni de APU).
 router = APIRouter(tags=["dashboard"])
 
-ULTIMOS = 5
-DIAS_ACTUALIZADOS = 30
+ULTIMOS = 5             # cuántos elementos mostrar en las listas "últimos/recientes"
+DIAS_ACTUALIZADOS = 30  # ventana para contar APU "actualizados recientemente"
 
 
 def _contar(session: Session, modelo, *condiciones) -> int:
+    """SELECT COUNT(*) FROM modelo [WHERE condiciones]. Ej.: _contar(s, User, User.is_active.is_(True))."""
     consulta = select(func.count()).select_from(modelo)
     if condiciones:
         consulta = consulta.where(*condiciones)
@@ -30,6 +46,11 @@ def _contar(session: Session, modelo, *condiciones) -> int:
 
 
 def _resumenPresupuestos(session: Session) -> dict:
+    """Conteo por estado, suma de montos activos y los últimos creados.
+
+    GROUP BY status devuelve pares (estado, cantidad) -> se pasan a dict.
+    coalesce(sum(...), 0): si no hay activos, SUM da NULL; así queda 0.
+    """
     por_estado = dict(session.exec(
         select(Presupuesto.status, func.count()).group_by(Presupuesto.status)
     ).all())
@@ -52,6 +73,7 @@ def _resumenPresupuestos(session: Session) -> dict:
 
 
 def _resumenApu(session: Session) -> dict:
+    """Totales de APU y los más recientes (por fecha de edición, o de creación si nunca se editó)."""
     desde = datetime.now(timezone.utc) - timedelta(days=DIAS_ACTUALIZADOS)
     return {
         "total": _contar(session, APU),
@@ -66,6 +88,11 @@ def _resumenApu(session: Session) -> dict:
 
 
 def _resumenUsuarios(session: Session) -> dict:
+    """Conteos de usuarios y últimos eventos de auditoría con nombres legibles.
+
+    Se arma un dict {id: username} una sola vez para traducir los ids de la
+    auditoría sin hacer una consulta por cada evento.
+    """
     nombres = dict(session.exec(select(User.id, User.username)).all())
     eventos = session.exec(
         select(AuditoriaCuenta)
@@ -94,6 +121,7 @@ def mostrarDashboard(
     usuario: CurrentUser,
     session: Session = Depends(getSession),
 ):
+    """GET /dashboard: cualquier usuario con sesión; el contenido depende del rol."""
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",

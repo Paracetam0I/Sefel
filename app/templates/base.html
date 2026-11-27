@@ -1,3 +1,16 @@
+{#
+    base.html — Esqueleto común de TODAS las páginas.
+    EN SIMPLE: el "marco" de la app: menú superior (navbar), menú lateral (sidebar),
+      zona de avisos y un hueco ({% block content %}) que cada página rellena.
+    TÉCNICO: las páginas hacen {% extends "base.html" %} y sobrescriben bloques
+      (title, content, scripts). Además incluye 3 scripts globales:
+      1) Toasts: escucha el evento "notificar" (cabecera HX-Trigger, ver flash.py).
+      2) sefelDescargarPdf: en escritorio pide el PDF por fetch y lo guarda vía
+         Python (client.py, ApiEscritorio.guardarPdf); en navegador, descarga normal.
+      3) Cierre por inactividad (solo con usuario): mide clics/teclas, avisa al
+         servidor como mucho 1 vez/min (/api/sesion/actividad) y hace logout al vencer.
+      Al final, el modal de presupuestos (Alpine: abrir/cerrar con eventos window).
+-#}
 <!DOCTYPE html>
 <html lang="es">
 <head>

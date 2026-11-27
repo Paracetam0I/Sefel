@@ -1,4 +1,8 @@
 # app/models/__init__.py
+# Reúne todos los modelos en un solo lugar para poder importar así:
+#   from app.models import APU, User, Presupuesto
+# Además, al importarlos aquí, SQLModel "conoce" todas las tablas (lo necesitan
+# Alembic y la creación de tablas en app/core/inicializacion.py).
 from app.models.apu import APU, APUValidacion
 from app.models.user import User, UserRole
 from app.models.presupuesto import (

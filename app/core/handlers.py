@@ -1,3 +1,22 @@
+"""
+handlers.py — Qué responder cuando algo sale mal (sin login, sin permiso, BD caída).
+
+EN SIMPLE
+    Las dependencias (dependencies.py) solo "levantan la mano" lanzando una
+    excepción. Aquí se decide qué ve el usuario en cada caso:
+      - Sin sesión ......... lo manda al login (y recuerda a dónde iba).
+      - Sin permiso ........ página 403.
+      - Problema con la BD . página/aviso con explicación y qué hacer.
+
+TÉCNICO
+    Registra exception handlers en la app FastAPI. La respuesta cambia según
+    quién pidió la página:
+      - HTMX (cabecera HX-Request): no se puede devolver una página entera
+        dentro de un fragmento, así que se usan cabeceras HX-Redirect /
+        HX-Reswap o JSON.
+      - /api/...: JSON con código HTTP (401, 403, 503).
+      - Navegación normal: redirección 303 o plantilla HTML.
+"""
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
@@ -17,14 +36,18 @@ MENSAJE_INACTIVIDAD = "Tu sesión se ha cerrado por inactividad."
 
 
 def esHtmx(request: Request) -> bool:
+    """True si la petición la hizo HTMX (pide un fragmento, no una página entera)."""
     return request.headers.get("HX-Request") == "true"
 
 
 def esApi(request: Request) -> bool:
+    """True si es una ruta de API interna (espera JSON, no HTML)."""
     return request.url.path.startswith("/api/")
 
 
 def registerAuthHandlers(app: FastAPI, templates: Jinja2Templates) -> None:
+    """Conecta los tres manejadores de error a la app. Se llama desde main.py."""
+
     @app.exception_handler(LoginRequired)
     async def _on_login_required(request: Request, exc: LoginRequired):
         por_inactividad = exc.motivo == MOTIVO_INACTIVIDAD

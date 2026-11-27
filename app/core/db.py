@@ -1,3 +1,21 @@
+"""
+db.py — Conexión a la base de datos SQLite.
+
+EN SIMPLE
+    Aquí se "enchufa" la app a la base de datos. Define:
+      - engine: la conexión principal (el "cable" a la base).
+      - getSession(): presta una sesión a cada petición y la devuelve al
+        terminar, como sacar y devolver un libro de la biblioteca.
+
+TÉCNICO
+    - SQLAlchemy/SQLModel con SQLite en modo URI (mode=rw) para NO crear un
+      archivo vacío por accidente.
+    - Un listener "connect" ejecuta PRAGMAs en cada conexión nueva:
+      claves foráneas, modo WAL (lecturas y escrituras concurrentes) y
+      tiempo de espera ante bloqueos.
+    - getSession() es un generador que FastAPI usa como dependencia
+      (Depends(getSession)): abre la sesión, la entrega y la cierra al final.
+"""
 import sqlite3
 from urllib.parse import quote
 
@@ -21,11 +39,16 @@ DATABASE_URL = URL.create(
 # fallar con "database is locked" (el valor por defecto de SQLite es 5).
 ESPERA_BLOQUEO_SEGUNDOS = 15
 
+# check_same_thread=False: FastAPI atiende peticiones en distintos hilos y
+# SQLite, por defecto, solo permite usar la conexión en el hilo que la creó.
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False, "timeout": ESPERA_BLOQUEO_SEGUNDOS},
 )
 
+# "Fábrica" de sesiones: cada SessionLocal() es una sesión nueva.
+# autocommit=False -> hay que llamar session.commit() para guardar.
+# autoflush=False  -> no envía cambios a la BD hasta el commit/flush explícito.
 SessionLocal = sessionmaker(
     bind=engine,
     class_=Session,
@@ -35,6 +58,13 @@ SessionLocal = sessionmaker(
 
 @event.listens_for(engine, "connect")
 def _enable_sqlite_fks(dbapi_conn, _record):
+    """Configura cada conexión nueva a SQLite (se ejecuta automáticamente).
+
+    En simple: SQLite viene con algunas protecciones apagadas; aquí se encienden.
+    Técnico: foreign_keys=ON hace respetar las claves foráneas (SQLite las
+    ignora por defecto); WAL + synchronous=NORMAL mejora la concurrencia;
+    busy_timeout espera en vez de fallar si la base está ocupada.
+    """
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     # WAL: leer no bloquea a quien escribe ni al revés. Con varios usuarios a la
@@ -61,5 +91,10 @@ def crearArchivoBD() -> bool:
 
 
 def getSession():
+    """Dependencia de FastAPI: entrega una sesión de BD por petición.
+
+    Uso en un endpoint: `session: Session = Depends(getSession)`.
+    El `with` garantiza que la sesión se cierre aunque ocurra un error.
+    """
     with SessionLocal() as session:
         yield session

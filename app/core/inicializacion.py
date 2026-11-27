@@ -1,5 +1,15 @@
 """Preparación de la base de datos y del administrador al arrancar.
 
+EN SIMPLE
+    Es la "lista de chequeo" antes de abrir la app:
+      1. ¿Existe la base de datos? Si es la primera vez, se crea. Si existía
+         y desapareció, se avisa (no se crea una vacía sin preguntar, para no
+         "perder" los datos sin que nadie lo note).
+      2. ¿Las tablas están al día? Si hay una versión nueva, se actualizan
+         (migraciones de Alembic).
+      3. ¿Hay al menos un administrador activo? Si no, se crea "admin".
+
+TÉCNICO
 La usan scripts/iniciar.py (desarrollo) y client.py (también el ejecutable,
 que no incluye la carpeta scripts/):
 
@@ -56,6 +66,7 @@ class BaseDatosFaltante(RuntimeError):
 
 
 def _leerRegistro() -> dict:
+    """Lee instalacion.json; si no existe o está dañado, devuelve {}."""
     try:
         return json.loads(REGISTRO_INSTALACION.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -94,6 +105,7 @@ ALEMBIC_DIR = RAIZ / "alembic"
 
 @dataclass(frozen=True)
 class UsuarioInicial:
+    """Datos de un usuario a crear al iniciar (frozen = inmutable)."""
     username: str
     email: str
     password: str
@@ -116,10 +128,13 @@ ADMIN_INICIAL = UsuarioInicial(
 # ==========================================
 
 def hayMigraciones() -> bool:
+    """True si están alembic.ini y la carpeta alembic/ (se pueden aplicar migraciones)."""
     return ALEMBIC_INI.exists() and ALEMBIC_DIR.is_dir()
 
 
 def _configAlembic():
+    """Configuración de Alembic apuntando a la carpeta real (repo o .exe)."""
+    # Import dentro de la función: Alembic solo se carga si de verdad se usa
     from alembic.config import Config
 
     config = Config(str(ALEMBIC_INI))
@@ -158,6 +173,13 @@ def prepararBaseDatos(crear_si_falta: bool = False) -> str:
 
 
 def _prepararEsquema(existia: bool) -> str:
+    """Deja las tablas al día. Tres casos:
+
+      1. BD sin tablas -> create_all() desde los modelos + "stamp head"
+         (marca la BD como si ya tuviera todas las migraciones aplicadas).
+      2. BD con tablas pero sin tabla alembic_version -> solo crea las que falten.
+      3. BD controlada por Alembic -> "upgrade head" si hay migraciones pendientes.
+    """
     tablas = set(inspect(engine).get_table_names())
     migraciones = hayMigraciones()
 
@@ -209,6 +231,7 @@ def verificarTablas() -> list[str]:
 # ==========================================
 
 def _adminActivo(session: Session) -> User | None:
+    """Primer usuario con rol ADMIN y activo, o None."""
     return session.exec(
         select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True))
     ).first()

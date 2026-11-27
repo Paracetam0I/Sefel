@@ -1,3 +1,11 @@
+"""
+Herramienta para crear/revisar las tablas de la BD directamente desde los modelos.
+
+EN SIMPLE: compara las tablas que definen los modelos con las que tiene la base
+y crea las que falten. Útil en desarrollo; la app normal usa
+app/core/inicializacion.py (con Alembic).
+Uso: python -m scripts.generate --help
+"""
 # create_tables.py
 import argparse
 import sys

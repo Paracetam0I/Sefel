@@ -1,5 +1,15 @@
 """Cálculos de presupuestación: subtotales de ítems, totales y porcentajes.
 
+EN SIMPLE
+    Es la "calculadora" del presupuesto:
+      1. Cada ítem: cantidad x precio unitario = subtotal.
+      2. El presupuesto suma los subtotales de todos sus ítems.
+      3. Sobre esa suma se agregan gastos generales y utilidad (costo neto).
+      4. Sobre el neto se agrega el IVA -> total final.
+    Ejemplo: base 1.000.000, GG 10 %, utilidad 15 %, IVA 19 %
+      -> neto 1.250.000 -> IVA 237.500 -> total 1.487.500.
+
+TÉCNICO
 Fórmulas (formato de la cotización; montos CLP enteros, redondeados al peso):
     base (costo directo)   = costo_directo fijo (si > 0) o total_real
     monto_gastos_generales = base * pct_gastos_generales / 100
@@ -23,10 +33,15 @@ SIN_CATEGORIA = "Sin categoría"
 
 
 def _redondear(valor: Decimal) -> int:
+    """Redondea al peso entero "como en el colegio" (0,5 sube): 2,5 -> 3.
+
+    Se usa ROUND_HALF_UP porque round() de Python redondea al par (2,5 -> 2).
+    """
     return int(valor.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _porcentaje(monto: int | Decimal, pct: float) -> Decimal:
+    """monto * pct / 100 con Decimal (aritmética exacta, sin errores de float)."""
     # str() evita arrastrar el error binario del float (19.9 -> 19.899999...)
     return Decimal(monto) * Decimal(str(pct)) / Decimal(100)
 
@@ -46,7 +61,13 @@ def calcularMontos(
     costo_directo: int | None = None,
     costo_neto: int | None = None,
 ) -> dict:
-    """Aplica los porcentajes sobre la base y devuelve los montos derivados."""
+    """Aplica los porcentajes sobre la base y devuelve los montos derivados.
+
+    costo_directo y costo_neto son valores "fijados a mano" por el usuario:
+    si vienen (y son > 0) reemplazan al valor calculado. 0 o None = calcular.
+    Devuelve un dict con monto_gastos_generales, monto_utilidad,
+    monto_costo_neto, monto_iva y monto_total.
+    """
     base = costo_directo if costo_directo else total_real
 
     monto_gg = _redondear(_porcentaje(base, pct_gastos_generales))
@@ -96,7 +117,12 @@ def recalcularPresupuesto(session: Session, presupuesto: Presupuesto) -> Presupu
 
 
 def totalesPorCategoria(session: Session, presupuesto: Presupuesto) -> list[dict]:
-    """Suma cotizado y real de los ítems agrupados por la categoría del APU."""
+    """Suma cotizado y real de los ítems agrupados por la categoría del APU.
+
+    Ej.: [{"categoria": "Hormigones", "cantidad_items": 3, "cotizado": ..., "real": ...}, ...]
+    Técnico: JOIN DetallePresupuesto-APU para obtener la categoría; defaultdict
+    crea el grupo en cero la primera vez que aparece una categoría.
+    """
     filas = session.exec(
         select(DetallePresupuesto, APU.category)
         .join(APU, APU.id == DetallePresupuesto.id_apu)

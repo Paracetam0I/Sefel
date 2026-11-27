@@ -1,6 +1,9 @@
 """
 Seed de datos iniciales.
 
+EN SIMPLE: "sembrar" = cargar datos de partida. Crea un usuario por cada rol
+(admin, materiales, presupuestos, ...) para poder probar los permisos.
+
 Uso:
     python -m scripts.seed
 """

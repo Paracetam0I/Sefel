@@ -1,5 +1,17 @@
 """Cotización en PDF de un presupuesto (ReportLab, generada en el servidor).
 
+EN SIMPLE
+    Arma la "cotización impresa" que se le entrega al cliente: título, logo,
+    número y fecha, datos de la empresa y del cliente, la tabla de ítems, los
+    totales (costo directo, GG, utilidad, neto, IVA, total) y espacio para
+    firmas. Se hace en dos pasos: primero se juntan los datos, luego se dibujan.
+
+TÉCNICO
+    ReportLab "platypus": se arma una lista de bloques (Flowables: Table,
+    Paragraph, Spacer, Image...) llamada `historia`, y doc.build() los coloca
+    en páginas tamaño carta, saltando de página cuando no caben.
+    El PDF se escribe en memoria (BytesIO), no en disco.
+
 El diseño sigue la cotización de referencia de SEFEL: encabezado con logo y
 recuadro de número/fecha/validez, datos de empresa y cliente, tabla de ítems,
 bloque de totales (costo directo, GG, utilidad, neto, IVA, total),
@@ -104,14 +116,17 @@ def nombreArchivo(presupuesto: Presupuesto, fecha: date | None = None) -> str:
 # ==========================================
 
 def _miles(valor: int | float) -> str:
+    """1500000 -> '1.500.000' (separador de miles chileno)."""
     return f"{valor:,.0f}".replace(",", ".")
 
 
 def _pct(valor: float) -> str:
+    """19.5 -> '19,5%'; 19.0 -> '19%' (el formato :g quita decimales sobrantes)."""
     return f"{valor:g}".replace(".", ",") + "%"
 
 
 def _estilo(nombre: str, **kwargs) -> ParagraphStyle:
+    """Estilo de texto basado en Helvetica 8,5; kwargs cambia lo que se necesite."""
     base = {"fontName": "Helvetica", "fontSize": 8.5, "leading": 11}
     base.update(kwargs)
     return ParagraphStyle(nombre, **base)
@@ -126,6 +141,7 @@ ESTILO_DATO = _estilo("dato", fontName="Helvetica-Oblique")
 
 
 def _dato(etiqueta: str, valor: str) -> Paragraph:
+    """Línea "Etiqueta: valor" con la etiqueta en negrita cursiva."""
     # Paragraph interpreta etiquetas: se escapan los datos ingresados por usuarios
     return Paragraph(f"<b><i>{etiqueta}</i></b> {escape(valor or '')}", ESTILO_DATO)
 
@@ -134,6 +150,12 @@ def _dato(etiqueta: str, valor: str) -> Paragraph:
 # ==========================================
 
 def _encabezado(datos: dict) -> list:
+    """Título "COTIZACIÓN", logo a la izquierda y recuadro gris con Nº/fecha/código/validez.
+
+    Se maqueta como una tabla invisible de 2 filas x 3 columnas (la primera
+    fila une sus 3 celdas con SPAN para el título). Si falta el logo, deja un
+    espacio vacío en su lugar.
+    """
     logo = [
         Image(LOGO, width=3.2 * cm, height=3.2 * cm * 365 / 794)
         if os.path.exists(LOGO) else Spacer(1, 1.2 * cm),
@@ -171,6 +193,7 @@ def _encabezado(datos: dict) -> list:
 
 
 def _datosEmpresaCliente(datos: dict) -> list:
+    """Dos columnas: datos de la empresa (izquierda) y del cliente (derecha)."""
     empresa, cliente = datos["empresa"], datos["cliente"]
     filas = [
         [Paragraph("<b>Datos Empresa</b>", ESTILO), Paragraph("<b><i>Datos Cliente</i></b>", ESTILO)],
@@ -192,6 +215,13 @@ def _datosEmpresaCliente(datos: dict) -> list:
 
 
 def _tablaItems(datos: dict) -> list:
+    """Tabla de ítems: Nº, descripción, unidad, cantidad, valor unitario y total.
+
+    Coordenadas de TableStyle: (columna, fila); -1 = la última.
+    El "$" va en una columna propia para que los montos queden alineados.
+    repeatRows=1 repite el encabezado si la tabla pasa a otra página.
+    La columna de descripción ocupa el ancho que sobra de las demás.
+    """
     filas = [[
         Paragraph("<b>Item</b>", ESTILO), Paragraph("<b>Descripción</b>", ESTILO),
         Paragraph("<b>Unid.</b>", ESTILO), Paragraph("<b>Cantidad</b>", ESTILO),
@@ -237,6 +267,7 @@ def _tablaItems(datos: dict) -> list:
 
 
 def _bloqueTotales(datos: dict) -> Table:
+    """Recuadro gris de totales, alineado a la derecha de la página."""
     t = datos["totales"]
     filas = [
         ["COSTO DIRECTO", "", "$", _miles(t["costo_directo"])],
@@ -269,6 +300,7 @@ def _bloqueTotales(datos: dict) -> Table:
 
 
 def _consideracionesYFirmas() -> list:
+    """Cuadro vacío de "Consideraciones" y dos espacios de firma (empresa / cliente)."""
     consideraciones = Table(
         [[Paragraph("<b><i>Consideraciones:</i></b>", ESTILO)]],
         colWidths=[ANCHO_UTIL], rowHeights=[2 * cm],
@@ -292,6 +324,7 @@ def _consideracionesYFirmas() -> list:
 
 
 def _pie(canvas, doc) -> None:
+    """Número de página abajo a la derecha. ReportLab lo llama al dibujar cada página."""
     canvas.saveState()
     canvas.setFont("Helvetica", 7)
     canvas.setFillColor(colors.HexColor("#888888"))
@@ -303,6 +336,7 @@ def _pie(canvas, doc) -> None:
 # ==========================================
 
 def generarPdfCotizacion(datos: dict) -> bytes:
+    """Dibuja el PDF a partir del dict de datosCotizacion() y devuelve sus bytes."""
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -325,4 +359,5 @@ def generarPdfCotizacion(datos: dict) -> bytes:
 
 
 def generarPdfPresupuesto(session: Session, presupuesto: Presupuesto) -> bytes:
+    """Atajo que usa el router: junta los datos y dibuja el PDF."""
     return generarPdfCotizacion(datosCotizacion(session, presupuesto))

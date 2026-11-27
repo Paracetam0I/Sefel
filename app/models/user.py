@@ -1,3 +1,17 @@
+"""
+user.py — Modelo de usuario (tabla "user").
+
+EN SIMPLE
+    Cada fila es una persona que puede entrar a la app: su nombre de usuario,
+    correo, contraseña (triturada), rol (qué puede hacer) y si está activa o
+    bloqueada.
+
+TÉCNICO
+    SQLModel = pydantic + SQLAlchemy: la misma clase sirve para validar datos
+    y como tabla (table=True). El rol se guarda como texto ("ADMIN"...) con un
+    CHECK en la BD (native_enum=False + create_constraint=True), porque SQLite
+    no tiene tipo ENUM. Un usuario tiene muchos presupuestos (1 a N).
+"""
 from typing import TYPE_CHECKING, List
 
 from datetime import datetime, timezone
@@ -6,18 +20,22 @@ from enum import Enum
 from sqlalchemy import Column, Enum as SQLAlchemyEnum
 from sqlmodel import Field, SQLModel, Relationship
 
+# TYPE_CHECKING es False al ejecutar: este import solo lo ven los editores y
+# los chequeadores de tipos. Evita un import circular user <-> presupuesto.
 if TYPE_CHECKING:
     from app.models.presupuesto import Presupuesto
 
 class UserRole(str, Enum):
-    ADMIN = "ADMIN"
-    MATERIALS = "MATERIALS"
-    BUDGETS = "BUDGETS"
-    BOTH = "BOTH"
-    VIEWER = "VIEWER"
+    """Roles posibles. Qué puede hacer cada uno está en app/core/permisos.py."""
+    ADMIN = "ADMIN"          # todo, incluida la gestión de usuarios
+    MATERIALS = "MATERIALS"  # catálogo de APU
+    BUDGETS = "BUDGETS"      # presupuestos
+    BOTH = "BOTH"            # APU + presupuestos
+    VIEWER = "VIEWER"        # solo ver y exportar presupuestos
 
 
 class User(SQLModel, table=True):
+    """Una cuenta de usuario. La contraseña se guarda solo como hash (security.py)."""
     __tablename__ = "user"
 
     id: int | None = Field(default=None, primary_key=True)
@@ -73,6 +91,7 @@ class User(SQLModel, table=True):
     locked_at: datetime | None = Field(default=None, nullable=True)
     # Bloqueo temporal: solo se usa con el único ADMIN activo, que no se desactiva
     locked_until: datetime | None = Field(default=None, nullable=True)
+    # Relación 1..N: usuario.presupuestos -> lista de sus presupuestos
     presupuestos: List["Presupuesto"] = Relationship(back_populates="usuario")
 
 

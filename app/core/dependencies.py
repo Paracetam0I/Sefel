@@ -1,3 +1,23 @@
+"""
+dependencies.py — ¿Quién está usando la app? (sesión y control de acceso)
+
+EN SIMPLE
+    Es el "guardia de la puerta". Antes de entrar a cualquier página revisa:
+      1. ¿Tiene pase? (hay un user_id en la sesión)
+      2. ¿El pase sigue vigente? (no pasaron más de 30 min sin actividad)
+      3. ¿La persona sigue habilitada? (el usuario existe y está activo)
+      4. ¿Puede entrar a ESTA sala? (su rol está permitido -> requireRoles)
+    Si algo falla, no muestra un error: lanza una excepción que
+    app/core/handlers.py convierte en "ir al login" o "403 sin permiso".
+
+TÉCNICO
+    Son dependencias de FastAPI (se inyectan con Depends). La sesión es una
+    cookie firmada con SECRET_KEY (SessionMiddleware), así que el navegador
+    puede leerla pero no modificarla sin invalidarla.
+      - getCurrentUser  -> exige login (alias CurrentUser).
+      - getOptionalUser -> login opcional (alias OptionalUser).
+      - requireRoles    -> fábrica de dependencias que filtra por rol.
+"""
 from __future__ import annotations
 
 import time
@@ -11,6 +31,7 @@ from app.core.db import getSession
 from app.models.user import User, UserRole
 
 
+# Claves que se guardan dentro de la cookie de sesión
 SESSION_USER_KEY = "user_id"
 SESSION_ACTIVIDAD_KEY = "ultima_actividad"
 MOTIVO_INACTIVIDAD = "inactividad"
@@ -22,6 +43,7 @@ def marcaDeTiempo() -> float:
 
 
 def marcarActividad(request: Request) -> None:
+    """Anota "ahora" como última actividad: reinicia el reloj de inactividad."""
     request.session[SESSION_ACTIVIDAD_KEY] = marcaDeTiempo()
 
 
@@ -104,7 +126,13 @@ def getOptionalUser(
     return _cargar_usuario(request, session)
 
 def requireRoles(*roles: UserRole):
-    """Devuelve una dependency que solo deja pasar a usuarios con uno de los roles dados."""
+    """Devuelve una dependency que solo deja pasar a usuarios con uno de los roles dados.
+
+    En simple: es una "fábrica de guardias"; requireRoles(ADMIN) crea un guardia
+    que solo deja pasar administradores.
+    Técnico: es un closure. checkRole depende a su vez de CurrentUser, así que
+    primero se verifica el login y luego el rol. Se usa en app/core/permisos.py.
+    """
     allowed = set(roles)
 
     def checkRole(request: Request, user: CurrentUser) -> User:

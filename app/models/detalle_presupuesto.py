@@ -1,4 +1,20 @@
 # app/models/detalle_presupuesto.py
+"""
+detalle_presupuesto.py — Ítems (líneas) de un presupuesto.
+
+EN SIMPLE
+    Si el presupuesto es una boleta, cada DetallePresupuesto es una línea:
+    "Hormigón H25 — 10 m3 — $95.000 c/u — subtotal $950.000".
+    Une un Presupuesto con un APU del catálogo.
+
+    Importante: al agregar el ítem se COPIAN los precios del APU (snapshot).
+    Si mañana el APU sube de precio, los presupuestos ya armados no cambian.
+
+TÉCNICO
+    Tabla intermedia con datos propios entre presupuesto (N) y apu (N).
+    FK: id_presupuesto -> presupuesto, id_apu -> apu, ambas indexadas.
+    Los subtotales los calcula calcularSubtotales() en app/core/calculos.py.
+"""
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
@@ -11,6 +27,7 @@ if TYPE_CHECKING:
 
 
 class DetallePresupuesto(SQLModel, table=True):
+    """Una línea del presupuesto: qué APU, cuántas unidades y a qué precio."""
     __tablename__ = "detalle_presupuesto"
 
     __table_args__ = (

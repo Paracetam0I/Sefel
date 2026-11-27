@@ -1,5 +1,12 @@
 """Reglas de validación compartidas entre backend y frontend.
 
+EN SIMPLE
+    Es el "reglamento" de qué se puede escribir en los formularios: qué
+    caracteres valen en un texto, que los códigos van en MAYÚSCULAS y entre
+    qué fechas puede estar un presupuesto. Se revisa dos veces: en el
+    navegador (para avisar rápido) y en el servidor (la que de verdad cuenta).
+
+TÉCNICO
 Fuente única: los modelos de validación (APUValidacion, PresupuestoValidacion)
 llaman a estas funciones en creación y edición, y las plantillas usan
 REGLAS_HTML (registrada como global de Jinja) para los atributos pattern/min/max
@@ -37,7 +44,11 @@ class ErrorValidacion(ValueError):
 
 
 def normalizarTexto(valor: str) -> str:
-    """Quita espacios externos y une tildes escritas como dos caracteres (NFC)."""
+    """Quita espacios externos y une tildes escritas como dos caracteres (NFC).
+
+    Ej.: "é" puede llegar como "e" + "´" (2 caracteres); NFC lo deja en 1, así
+    "café" escrito de dos formas distintas se guarda y compara igual.
+    """
     return unicodedata.normalize("NFC", valor).strip()
 
 
@@ -64,10 +75,12 @@ def validarCodigo(valor: str) -> str:
 
 
 def _comoFecha(valor: date | datetime) -> date:
+    """datetime -> date (descarta la hora) para comparar solo días."""
     return valor.date() if isinstance(valor, datetime) else valor
 
 
 def validarFechaInicio(inicio: date | datetime | None) -> date | datetime:
+    """Obligatoria y no anterior a FECHA_INICIO_MINIMA (01/01/2026)."""
     if inicio is None:
         raise ErrorValidacion("La fecha de inicio es obligatoria.")
     if _comoFecha(inicio) < FECHA_INICIO_MINIMA:
@@ -81,6 +94,7 @@ def validarFechaInicio(inicio: date | datetime | None) -> date | datetime:
 def validarFechaTermino(
     termino: date | datetime | None, inicio: date | datetime | None
 ) -> date | datetime:
+    """Obligatoria, no posterior a FECHA_TERMINO_MAXIMA y no antes del inicio."""
     if termino is None:
         raise ErrorValidacion("La fecha de término es obligatoria.")
     if _comoFecha(termino) > FECHA_TERMINO_MAXIMA:
@@ -96,7 +110,12 @@ def validarFechaTermino(
 
 
 def mensajeDe(error: dict) -> str | None:
-    """Mensaje de una ErrorValidacion dentro de un error de pydantic (o None)."""
+    """Mensaje de una ErrorValidacion dentro de un error de pydantic (o None).
+
+    Técnico: cuando un validador de pydantic lanza ErrorValidacion, pydantic
+    lo envuelve en un ValidationError; el original queda en error["ctx"]["error"].
+    Esto lo recupera para mostrar nuestro mensaje en español y no el de pydantic.
+    """
     causa = (error.get("ctx") or {}).get("error")
     return str(causa) if isinstance(causa, ErrorValidacion) else None
 

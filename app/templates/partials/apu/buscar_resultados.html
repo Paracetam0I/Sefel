@@ -1,3 +1,9 @@
+{#
+    partials/apu/buscar_resultados.html — Lista de resultados del buscador de APU.
+    EN SIMPLE: cada resultado es un botón; al pulsarlo, HTMX pide
+      /api/apu/{id}/autocompletar y rellena #campos-apu con sus datos.
+    Lo devuelve GET /api/apu/buscar (routers/items.py).
+-#}
 {% if apus %}
 <ul class="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white shadow-sm" role="listbox">
     {% for a in apus %}

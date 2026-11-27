@@ -1,4 +1,9 @@
+"""
+Crea APU de prueba (APU-TEST-002 ... APU-TEST-012) para probar la paginación.
 
+EN SIMPLE: llena el catálogo con fichas de mentira. Si un código ya existe, lo salta.
+Uso: python -m scripts.crear_apus_prueba
+"""
 from sqlmodel import Session, select
 
 from app.core.db import engine

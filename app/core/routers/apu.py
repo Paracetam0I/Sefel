@@ -1,3 +1,25 @@
+"""
+apu.py — Catálogo de APU: listar, crear, editar y activar/desactivar.
+
+EN SIMPLE
+    Es la pantalla del "catálogo de precios". Se ve una tabla de APU con
+    buscador y filtros, tarjetas de resumen arriba y un botón para crear uno
+    nuevo. Crear y editar se hace en una ventana emergente (modal) sin
+    recargar la página. Los APU no se borran: se desactivan.
+
+TÉCNICO
+    Rutas (todas exigen ROLES_APU, puesto en el router):
+      GET  /apu                 -> lista (página completa o solo la tabla si es HTMX)
+      GET  /apu/nuevo           -> formulario de creación
+      POST /apu                 -> crear
+      GET  /apu/{id}/editar     -> formulario de edición
+      POST /apu/{id}            -> guardar edición
+      POST /apu/{id}/estado     -> activar/desactivar
+    Cada ruta funciona en dos modos:
+      - HTMX (el modal): responde un fragmento y usa cabeceras HX-* para
+        decir dónde insertarlo y cuándo cerrar el modal.
+      - Normal (sin JavaScript): página completa + redirección 303.
+"""
 
 from datetime import datetime, timedelta, timezone
 from math import ceil
@@ -32,10 +54,13 @@ LISTA_URL = "/apu"
 # ==========================================
 
 def _buscar(session: Session, apu_id: int) -> APU | None:
+    """APU por id (clave primaria), o None si no existe."""
     return session.get(APU, apu_id)
 
 
 def _resumen(todos: list[APU]) -> dict:
+    """Números de las tarjetas superiores: registrados, activos, inactivos y
+    actualizados en los últimos 30 días (con su texto descriptivo)."""
     ahora = datetime.now(timezone.utc)
     activos = sum(1 for apu in todos if apu.is_active)
 
@@ -66,6 +91,11 @@ def _filtrar(
     categoria: str,
     estado: str,
 ) -> list[APU]:
+    """Filtra la lista por texto (código o nombre), categoría y estado.
+
+    casefold() es como lower() pero más completo para comparar sin
+    distinguir mayúsculas (p. ej. la "ß" alemana).
+    """
     texto = q.strip().casefold()
     resultado = []
 
@@ -96,6 +126,7 @@ def _datosFormulario(
     description: str = "",
     real_unit_cost: str | int = "",
 ) -> dict:
+    """Empaqueta los campos del formulario en un dict (mismo orden en todo el módulo)."""
     return {
         "code": code,
         "name": name,
@@ -109,6 +140,15 @@ def _datosFormulario(
 
 
 def _validar(datos: dict) -> tuple[dict, str | None]:
+    """Valida los datos del formulario con APUValidacion.
+
+    Devuelve (datos, None) si todo está bien, o (datos_escritos, mensaje) con
+    el PRIMER error traducido a un mensaje en español.
+
+    En simple: pydantic revisa los datos y, si algo está mal, entrega un error
+    técnico como {"loc": ("unit_cost",), "type": "int_parsing"}. Aquí se
+    convierte eso en "El precio unitario debe ser un número entero."
+    """
     datos_limpios = _datosFormulario(
         str(datos.get("code", "")),
         str(datos.get("name", "")),
@@ -128,9 +168,9 @@ def _validar(datos: dict) -> tuple[dict, str | None]:
 
 
     except ValidationError as exc:
-        error = exc.errors()[0]
-        campo = error["loc"][0]
-        tipo = error["type"]
+        error = exc.errors()[0]   # solo el primer error: se muestra uno a la vez
+        campo = error["loc"][0]   # qué campo falló
+        tipo = error["type"]      # por qué (int_parsing, string_too_long, value_error...)
 
         nombres = {
             "code": ("El código", 50),
@@ -179,6 +219,11 @@ def _codigoExistente(
     code: str,
     excluir_id: int | None = None,
 ) -> bool:
+    """True si ya hay un APU con ese código (sin distinguir mayúsculas).
+
+    excluir_id: al editar, se ignora el propio APU (si no, siempre "chocaría"
+    consigo mismo).
+    """
     consulta = select(APU).where(
         func.lower(APU.code) == code.casefold()
     )
@@ -198,6 +243,10 @@ def _renderFormulario(
     status_code: int = 200,
     es_htmx: bool = False,
 ):
+    """Formulario de APU: solo el fragmento (para el modal HTMX) o la página completa.
+
+    `apu` puede ser un objeto APU (editar) o un dict con lo escrito (tras un error).
+    """
     return templates.TemplateResponse(
         request=request,
         name=(
@@ -236,6 +285,11 @@ def _renderLista(
     es_htmx: bool = False,
     resaltar_id: int | None = None,
 ):
+    """Dibuja el listado (página completa, o solo la tabla si es HTMX).
+
+    resaltar_id: id del APU recién creado/editado; se salta a la página donde
+    quedó y la plantilla lo resalta.
+    """
     # Lo más reciente primero: un APU recién creado aparece arriba de la página 1
     todos = session.exec(
         select(APU).order_by(APU.created_at.desc(), APU.id.desc())
@@ -311,6 +365,7 @@ def listar(
     estado: str = "",
     pagina: int = 1,
 ):
+    """GET /apu. Al filtrar o paginar, HTMX pide solo la tabla (no la página entera)."""
     return _renderLista(
         request,
         usuario,
@@ -331,6 +386,7 @@ def mostrarFormulario(
     request: Request,
     usuario: CurrentUser,
 ):
+    """GET /apu/nuevo: formulario vacío."""
     return _renderFormulario(
         request,
         usuario,
@@ -354,6 +410,13 @@ def crear(
     real_unit_cost: str = Form(""),
     session: Session = Depends(getSession),
 ):
+    """POST /apu: valida, revisa código repetido y guarda.
+
+    Con HTMX los errores responden 200 (no 400) porque HTMX, por defecto, no
+    inserta respuestas con código de error y el usuario no vería el mensaje.
+    El IntegrityError es la segunda barrera: si dos personas crean el mismo
+    código a la vez, el índice único de la BD rechaza el segundo.
+    """
     es_htmx = request.headers.get("HX-Request") == "true"
 
     datos, error = _validar(
@@ -404,6 +467,8 @@ def crear(
             es_htmx=True,
             resaltar_id=nuevo.id,
         )
+        # El formulario apuntaba al modal; con estas cabeceras la respuesta
+        # (la tabla actualizada) se inserta en #contenido-apu en su lugar.
         respuesta.headers["HX-Retarget"] = "#contenido-apu"
         respuesta.headers["HX-Reswap"] = "innerHTML"
         # Cerrar el modal DESPUÉS del swap: si se cierra antes, vacía el formulario
@@ -425,6 +490,7 @@ def mostrarEdicion(
     usuario: CurrentUser,
     session: Session = Depends(getSession),
 ):
+    """GET /apu/{id}/editar: formulario con los datos actuales del APU."""
     apu = _buscar(session, apu_id)
 
     if apu is None:
@@ -455,6 +521,11 @@ def actualizar(
     real_unit_cost: str = Form(""),
     session: Session = Depends(getSession),
 ):
+    """POST /apu/{id}: igual que crear(), pero sobre un APU existente.
+
+    Cambiar el precio de un APU NO cambia los presupuestos ya armados: sus
+    ítems guardaron una copia del precio (ver DetallePresupuesto).
+    """
     es_htmx = request.headers.get("HX-Request") == "true"
 
     apu = _buscar(session, apu_id)
@@ -543,6 +614,11 @@ def cambiarEstado(
     pagina: int = Form(1),
     session: Session = Depends(getSession),
 ):
+    """POST /apu/{id}/estado: invierte activo <-> inactivo.
+
+    Recibe los filtros y la página actuales para volver a la misma vista de
+    la tabla. Un APU inactivo no aparece en el buscador al agregar ítems.
+    """
     es_htmx = request.headers.get("HX-Request") == "true"
     apu = _buscar(session, apu_id)
 

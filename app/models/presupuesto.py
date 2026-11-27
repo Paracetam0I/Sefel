@@ -1,4 +1,23 @@
 # app/models/presupuesto.py
+"""
+presupuesto.py — Presupuestos (cotizaciones) y su validación.
+
+EN SIMPLE
+    Un presupuesto es una cotización para un cliente: código, cliente,
+    fechas, estado (borrador/activo/cerrado), sus ítems y los porcentajes de
+    gastos generales, utilidad e IVA. Los totales se guardan ya calculados
+    para mostrarlos rápido.
+
+TÉCNICO
+    Tres clases:
+      - Presupuesto (table=True): tabla "presupuesto". Relación 1..N con
+        DetallePresupuesto (cascade "all, delete-orphan": borrar el
+        presupuesto borra sus ítems) y N..1 con User.
+      - PresupuestoValidacion: valida el formulario de crear/editar.
+      - PorcentajesValidacion: valida el formulario de porcentajes.
+    Los campos monto_* y total_* los recalcula app/core/calculos.py; no se
+    escriben a mano.
+"""
 from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
@@ -20,16 +39,19 @@ if TYPE_CHECKING:
 
 
 class StatusPresupuestos(str, Enum):
-    ACTIVE = "ACTIVE"
-    CLOSE = "CLOSE"
-    DRAFT = "DRAFT"
+    """Estado del presupuesto. Hereda de str para guardarse/compararse como texto."""
+    ACTIVE = "ACTIVE"  # activo
+    CLOSE = "CLOSE"    # cerrado
+    DRAFT = "DRAFT"    # borrador (valor por defecto)
 
 
+# Rango válido de los porcentajes (GG, IVA, utilidad)
 PCT_MINIMO = 0
 PCT_MAXIMO = 100
 
 
 class Presupuesto(SQLModel, table=True):
+    """Cabecera del presupuesto: datos generales, porcentajes y totales."""
     __tablename__ = "presupuesto"
 
     __table_args__ = (
@@ -75,6 +97,7 @@ class Presupuesto(SQLModel, table=True):
             server_default=StatusPresupuestos.DRAFT.value,
         ))
 
+    # Ingreso estimado que se espera obtener del proyecto (CLP)
     estimate_income: int = Field(nullable=False)
 
     start_date: NaiveDatetime = Field(default=None)
@@ -126,6 +149,8 @@ class Presupuesto(SQLModel, table=True):
     # Relación
     usuario: Optional["User"] = Relationship(back_populates="presupuestos")
 
+    # @property: se lee como atributo (presupuesto.neto) pero se calcula al
+    # vuelo; no es columna de la BD. Lo usan las plantillas y el PDF.
     @property
     def base_calculo(self) -> int:
         """Base sobre la que se aplican los porcentajes."""
@@ -157,6 +182,7 @@ class PresupuestoValidacion(BaseModel):
     @field_validator("code", "client_name", "description")
     @classmethod
     def _no_vacio(cls, v: str, info: ValidationInfo) -> str:
+        # Un solo validador para 3 campos; info.field_name dice cuál es.
         if not v.strip():
             raise ValueError("campo vacío")
         if info.field_name == "code":
@@ -172,6 +198,7 @@ class PresupuestoValidacion(BaseModel):
     @field_validator("end_date")
     @classmethod
     def _termino(cls, v: datetime | None, info: ValidationInfo) -> datetime:
+        # info.data tiene los campos ya validados (start_date va antes, por eso está)
         return validarFechaTermino(v, info.data.get("start_date"))
 
 
@@ -184,6 +211,8 @@ class PorcentajesValidacion(BaseModel):
     costo_directo: int = Field(ge=0)
     costo_neto: int = Field(ge=0)
 
+    # mode="before": corre ANTES de convertir a float/int, así se puede
+    # arreglar el texto crudo del formulario ("" o "19,5").
     @field_validator("pct_gastos_generales", "pct_iva", "pct_utilidad", mode="before")
     @classmethod
     def _porcentajeVacioEsCero(cls, v):

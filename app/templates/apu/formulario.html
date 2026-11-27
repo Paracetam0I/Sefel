@@ -1,3 +1,7 @@
+{#
+    apu/formulario.html — Formulario de APU como página completa.
+    EN SIMPLE: el mismo formulario del modal, pero sin JavaScript (petición normal, no HTMX).
+-#}
 {% extends "base.html" %}
 
 {% block title %}{{ "Editar APU" if modo == "editar" else "Nuevo APU" }}{% endblock title %}

@@ -1,4 +1,17 @@
 # app/models/auditoria.py
+"""
+auditoria.py — Historial de bloqueos y reactivaciones de cuentas.
+
+EN SIMPLE
+    Es un "libro de actas": cada vez que una cuenta se bloquea, se desbloquea
+    o se desactiva, se anota quién lo hizo, a quién, cuándo y por qué.
+    Solo se agregan filas; nunca se editan.
+
+TÉCNICO
+    Tabla "auditoria_cuentas" con dos FK a user: id_usuario (afectado) e
+    id_actor (quien actuó; NULL = el sistema). Las filas las crea
+    registrarAuditoria() en app/core/bloqueo.py.
+"""
 from datetime import datetime, timezone
 from enum import Enum
 

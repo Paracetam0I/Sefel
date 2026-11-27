@@ -1,3 +1,11 @@
+{#
+    admin-panel/list.html — Gestión de usuarios (GET /admin/users, routers/admin.py).
+    EN SIMPLE: tarjetas de resumen, filtros (texto/rol/estado), tabla paginada con
+      interruptor activo/inactivo y panel lateral para crear (modo="crear") o
+      editar (modo="editar") un usuario.
+    TÉCNICO: formularios POST normales (sin HTMX); el servidor responde con
+      redirección 303 + flash. `qs_base`/`base_url` conservan filtros y página en los enlaces.
+-#}
 {% extends "base.html" %}
 {% from "partials/ui.html" import icono, encabezado, stat_card, paginacion, interruptor %}
 

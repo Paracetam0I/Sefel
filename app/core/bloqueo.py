@@ -1,5 +1,13 @@
 """Bloqueo de cuentas por intentos fallidos de inicio de sesión y su auditoría.
 
+EN SIMPLE
+    Como un cajero automático: si te equivocas 5 veces seguidas con la
+    contraseña, la cuenta se bloquea y un administrador debe desbloquearla.
+    Pero si eres el ÚNICO administrador, nadie podría desbloquearte; en ese
+    caso solo se te hace esperar 15 minutos.
+    Cada bloqueo / reactivación / desactivación queda anotado (auditoría).
+
+TÉCNICO
 Regla:
 - Tras MAX_INTENTOS fallos seguidos la cuenta se desactiva (is_active = False)
   y solo un ADMIN puede reactivarla desde admin/users.
@@ -33,12 +41,14 @@ MENSAJE_DESACTIVADA = (
 
 
 class ResultadoIntento(str, Enum):
+    """Qué pasó tras un intento fallido (el login decide el mensaje con esto)."""
     FALLIDO = "FALLIDO"                    # aún quedan intentos
     DESACTIVADA = "DESACTIVADA"            # se alcanzó el máximo: cuenta desactivada
     BLOQUEO_TEMPORAL = "BLOQUEO_TEMPORAL"  # único ADMIN activo: bloqueo corto
 
 
 def ahora() -> datetime:
+    """Fecha/hora actual en UTC (función aparte para poder simularla en tests)."""
     return datetime.now(timezone.utc)
 
 
@@ -76,6 +86,14 @@ def registrarIntentoFallido(session: Session, usuario_id: int) -> tuple[Resultad
     """Suma un intento fallido y aplica la regla de bloqueo.
 
     Devuelve el resultado y los intentos que quedan. Hace commit.
+
+    Pasos:
+      1. Suma 1 a failed_attempts directamente en la BD (UPDATE ... RETURNING),
+         no en Python, para que dos intentos simultáneos no se pisen.
+      2. Si aún no llega a MAX_INTENTOS -> FALLIDO.
+      3. Si llega: intenta desactivar con un UPDATE condicionado a "no es ADMIN
+         o hay otro ADMIN activo". rowcount == 1 significa que sí se desactivó.
+      4. Si no se pudo (era el único ADMIN) -> bloqueo temporal de 15 min.
     """
     tabla = User.__table__
     # Cierra la transacción de lectura del login: el primer statement de la

@@ -1,3 +1,8 @@
+{#
+    partials/navbar.html — Barra superior: logo y menú del usuario (nombre, rol, cerrar sesión).
+    EN SIMPLE: el menú desplegable se abre/cierra con Alpine (`abierto`).
+      Cerrar sesión es un formulario POST a /logout.
+-#}
 {# Algunas rutas (p. ej. /admin/users) pasan el usuario como "admin" en vez de "usuario" #}
 {% set usuario = usuario or admin %}
 <header class="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3.5 shadow-sm">
