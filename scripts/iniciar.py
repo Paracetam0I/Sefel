@@ -1,6 +1,13 @@
 """
 Inicia SEFEL en un solo paso:
 
+EN SIMPLE
+    Es el "botón de encendido" para desarrollo: revisa la base de datos y los
+    usuarios, y abre la app. Igual que client.py, pero con más opciones y
+    mensajes por consola.
+
+TÉCNICO
+
 1. Verifica la base de datos:
    - si no existe o está vacía, crea todas las tablas y la marca con la última
      migración de Alembic;
@@ -50,6 +57,7 @@ def prepararBaseDatos(crear_si_falta: bool = False) -> str:
 
 
 def verificarTablas() -> list[str]:
+    """Tablas que faltan en la BD (lista vacía = todo bien)."""
     return inicializacion.verificarTablas()
 
 
@@ -89,6 +97,7 @@ def _consolaSegura() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Ejecuta los pasos del docstring. Devuelve 0 si todo fue bien, 1 si hubo error."""
     _consolaSegura()
     args = parsearArgumentos(argv)
     print("=" * 60)

@@ -1,3 +1,9 @@
+{#
+    partials/apu/autocompletar_campos.html — Campos rellenados al elegir un APU.
+    EN SIMPLE: fragmento HTMX con el id del APU (oculto), unidad y costos ya
+      copiados del catálogo; el usuario puede ajustarlos antes de guardar.
+    Lo devuelve GET /api/apu/{id}/autocompletar (routers/items.py) dentro de #campos-apu.
+-#}
 <input type="hidden" name="id_apu" value="{{ apu.id }}">
 
 <p class="mb-4 text-sm text-gray-500">

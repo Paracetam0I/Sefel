@@ -1,3 +1,10 @@
+"""
+Script de demostración: crea un presupuesto de ejemplo (PRES-2026-001).
+
+EN SIMPLE: ejemplo mínimo de cómo crear y guardar un Presupuesto con SQLModel
+(abrir sesión -> crear objeto -> add -> commit).
+Uso: python -m scripts.script_demo_presupuestos
+"""
 # script_demo.py
 from datetime import datetime, timezone, timedelta
 

@@ -1,3 +1,23 @@
+"""
+items.py — Agregar y editar ítems (líneas) de un presupuesto.
+
+EN SIMPLE
+    Es la pantalla "Agregar ítem": se busca un APU del catálogo escribiendo
+    en un buscador, al elegirlo se rellenan solos la unidad y los precios, se
+    indica la cantidad y se guarda. Debajo se ve la lista de ítems ya
+    agregados, donde también se puede corregir cantidad y precios.
+    Cada cambio recalcula automáticamente los totales del presupuesto.
+
+TÉCNICO
+    Rutas (todas exigen rol de edición de presupuestos, puesto en el router):
+      GET  /api/apu/buscar?q=...                    -> fragmento HTMX con resultados
+      GET  /api/apu/{id}/autocompletar              -> fragmento HTMX con los campos
+      GET  /presupuestos/{id}/items/nuevo           -> página del formulario
+      POST /presupuestos/{id}/items                 -> crear ítem
+      POST /presupuestos/{id}/items/{item_id}       -> editar ítem
+    Flujo al guardar: validar -> crear DetallePresupuesto (copiando precios)
+    -> calcularSubtotales -> flush -> recalcularPresupuesto -> commit.
+"""
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_
@@ -22,7 +42,7 @@ router = APIRouter(
 )
 
 LISTA_URL = "/presupuestos"
-MAX_RESULTADOS = 8
+MAX_RESULTADOS = 8  # máximo de APU que muestra el buscador
 
 
 # Utilidades
@@ -65,6 +85,7 @@ def _renderFormulario(
     status_code: int = 200,
     session: Session | None = None,
 ):
+    """Dibuja item_nuevo.html. `datos` y `error` sirven para re-mostrar lo escrito tras un error."""
     return templates.TemplateResponse(
         request=request,
         name="item_nuevo.html",
@@ -89,6 +110,14 @@ def buscarApus(
     session: Session = Depends(getSession),
     q: str = "",
 ):
+    """Buscador en vivo: APU activos cuyo código o nombre contengan `q`.
+
+    En simple: mientras escribes, HTMX llama a esta ruta y reemplaza la lista
+    de resultados debajo del buscador.
+    Técnico: LIKE '%termino%' sin distinguir mayúsculas; autoescape=True hace
+    que "%" o "_" escritos por el usuario se busquen literalmente y no como
+    comodines de SQL.
+    """
     termino = q.strip().lower()
 
     consulta = select(APU).where(APU.is_active.is_(True))
@@ -115,6 +144,7 @@ def autocompletarApu(
     request: Request,
     session: Session = Depends(getSession),
 ):
+    """Al elegir un APU, devuelve los campos del formulario ya rellenos (unidad, costos)."""
     apu = session.get(APU, apu_id)
 
     if apu is None or not apu.is_active:
@@ -137,6 +167,7 @@ def mostrarFormularioItem(
     usuario: CurrentUser,
     session: Session = Depends(getSession),
 ):
+    """Página "Agregar ítem" de un presupuesto, con sus ítems actuales."""
     presupuesto = _presupuestoDelUsuario(session, presupuesto_id, usuario)
     if presupuesto is None:
         flash(request, "El presupuesto solicitado no existe.", "error")
@@ -160,6 +191,12 @@ def crearItem(
     descripcion: str = Form(""),
     session: Session = Depends(getSession),
 ):
+    """Crea un ítem en el presupuesto y recalcula sus totales.
+
+    Todos los campos se reciben como texto (str) y se convierten a mano con
+    _entero(), para poder mostrar un mensaje claro en vez del error genérico
+    de FastAPI si alguien escribe "abc" en un número.
+    """
     presupuesto = _presupuestoDelUsuario(session, presupuesto_id, usuario)
     if presupuesto is None:
         flash(request, "El presupuesto solicitado no existe.", "error")
@@ -228,6 +265,8 @@ def crearItem(
     )
     calcularSubtotales(item)                   # subtotales los calcula el servidor
     session.add(item)
+    # flush: envía el INSERT a la BD (sin confirmar) para que la consulta de
+    # recalcularPresupuesto ya "vea" el ítem nuevo al sumar.
     session.flush()
     recalcularPresupuesto(session, presupuesto)
 
@@ -263,6 +302,12 @@ def actualizarItem(
     real_unit_cost: str = Form(...),
     session: Session = Depends(getSession),
 ):
+    """Edita cantidad y costos de un ítem existente y recalcula el presupuesto.
+
+    Comprueba que el ítem pertenezca a ESE presupuesto (evita editar un ítem
+    ajeno cambiando el número en la URL). Al terminar vuelve a la página con
+    #item-<id> para que el navegador baje hasta la fila editada.
+    """
     presupuesto = _presupuestoDelUsuario(session, presupuesto_id, usuario)
     if presupuesto is None:
         flash(request, "El presupuesto solicitado no existe.", "error")

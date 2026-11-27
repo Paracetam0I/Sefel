@@ -1,3 +1,11 @@
+{#
+    partials/apu/formulario.html — Formulario de APU (crear o editar), fragmento del modal.
+    EN SIMPLE: campos código, nombre, unidad, categoría, costos y descripción.
+    TÉCNICO: hx-post a /apu (crear) o /apu/{id} (editar). Si hay error, el servidor
+      devuelve este mismo fragmento con `error` dentro del modal (#modal-contenido);
+      si sale bien, devuelve la tabla y cambia el destino con HX-Retarget.
+      Las reglas pattern/maxlength vienen de REGLAS_HTML (app/core/validaciones.py).
+-#}
 
 {% if error %}
     <div class="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">

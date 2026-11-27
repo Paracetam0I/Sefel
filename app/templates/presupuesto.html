@@ -1,3 +1,11 @@
+{#
+    presupuesto.html — Página de presupuestos (GET /presupuestos, routers/presupuestos.py).
+    EN SIMPLE: botones "Exportar PDF" y "Nuevo presupuesto" (abren el modal de
+      base.html), tarjetas de resumen y la tabla.
+    TÉCNICO: #contenido-presupuesto se recarga solo (hx-get="/presupuestos") cuando
+      ocurre el evento "recargar-presupuestos" (lo dispara guardar porcentajes),
+      incluyendo los filtros actuales (hx-include="#filtros-presupuesto").
+-#}
 {% extends "base.html" %}
 {% from "partials/ui.html" import icono, encabezado, stat_card %}
 

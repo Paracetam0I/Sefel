@@ -1,5 +1,19 @@
 """Lanzador de la interfaz de escritorio (pywebview + FastAPI).
 
+EN SIMPLE
+    SEFEL es, por dentro, una página web. Este archivo la convierte en un
+    "programa de escritorio":
+      1. Prepara la base de datos.
+      2. Enciende un servidor web local (uvicorn) en segundo plano.
+      3. Abre una ventana (pywebview) que muestra esa página, como un
+         navegador sin barra de direcciones.
+    Al cerrar la ventana, se apaga todo.
+
+TÉCNICO
+    uvicorn corre en un hilo daemon; pywebview usa WebView2 (el motor de Edge)
+    en el hilo principal. Con --red el servidor escucha en 0.0.0.0 para que
+    otros PCs de la LAN entren por navegador.
+
 Uso directo:          python client.py            (puerto libre al azar)
 Con puerto concreto:  python client.py 8765
 Modo red (compartido): python client.py --red     (otros PCs entran por navegador)
@@ -21,6 +35,7 @@ from pathlib import Path
 import uvicorn
 import webview
 
+# 127.0.0.1 = "este mismo PC": nadie de afuera puede conectarse.
 HOST = "127.0.0.1"
 
 # Modo red: el servidor escucha en todas las interfaces para que otros PCs de
@@ -67,9 +82,12 @@ class ApiEscritorio:
         o {"ok": False, "error": ...}.
         """
         try:
+            # basename: evita que un nombre como "../../x.pdf" apunte a otra carpeta
             nombre = os.path.basename(nombre) or "presupuesto.pdf"
             if not nombre.lower().endswith(".pdf"):
                 nombre += ".pdf"
+            # La página envía el PDF como texto base64; aquí vuelve a bytes.
+            # Todo PDF real empieza con "%PDF-": se comprueba por seguridad.
             contenido = base64.b64decode(contenido_base64, validate=True)
             if not contenido.startswith(b"%PDF-"):
                 return {"ok": False, "error": "El archivo recibido no es un PDF."}
@@ -104,7 +122,11 @@ def avisar(texto: str, error: bool = False) -> None:
 
 
 def getUnusedPort() -> int:
-    """Pide al sistema operativo un puerto libre en localhost."""
+    """Pide al sistema operativo un puerto libre en localhost.
+
+    Truco: bind al puerto 0 hace que el SO elija uno libre; se lee cuál fue y
+    se cierra el socket para que uvicorn lo use.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((HOST, 0))
         return sock.getsockname()[1]
@@ -151,6 +173,7 @@ def avisoRed(port: int) -> str:
 
 
 def puertoDisponible(port: int, host: str = HOST) -> bool:
+    """True si se puede ocupar el puerto (nadie más lo está usando)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
             sock.bind((host, port))
@@ -237,6 +260,10 @@ def prepararDatos() -> bool:
 
 
 def main(port: int | None = None, preparar: bool = True, red: bool = False) -> None:
+    """Arranca todo: BD -> servidor en segundo plano -> ventana de escritorio.
+
+    preparar=False lo usa scripts/iniciar.py, que ya preparó la BD antes.
+    """
     # Primero la BD: Alembic reconfigura el logging, así que va antes de cargar la app
     if preparar and not prepararDatos():
         return
@@ -271,6 +298,7 @@ def main(port: int | None = None, preparar: bool = True, red: bool = False) -> N
 
 
 def parsearArgumentos(argv: list[str] | None = None):
+    """Lee los argumentos de la línea de comandos (puerto opcional y --red)."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Abre SEFEL en una ventana de escritorio.")

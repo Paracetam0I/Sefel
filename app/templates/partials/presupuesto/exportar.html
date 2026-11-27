@@ -1,3 +1,9 @@
+{#
+    partials/presupuesto/exportar.html — Modal "Exportar PDF".
+    EN SIMPLE: elegir un presupuesto de la lista y descargarlo.
+    TÉCNICO: Alpine guarda el id elegido; el enlace a /presupuestos/{id}/pdf llama a
+      sefelDescargarPdf() (base.html), que en escritorio guarda vía Python.
+-#}
 {# Selector para exportar un presupuesto a PDF (se carga en el modal de presupuestos) #}
 {% set etiquetas = {"DRAFT": "Borrador", "ACTIVE": "Activo", "CLOSE": "Cerrado"} %}
 <div class="space-y-5"

@@ -1,3 +1,9 @@
+{#
+    dashboard.html — Tablero de resumen (GET /dashboard, routers/dashboard.py).
+    EN SIMPLE: tarjetas con números y listas de "últimos". Cada bloque solo se
+      dibuja si el router lo envió (presupuestos/apus/usuarios no son None),
+      es decir, si el rol tiene acceso a ese módulo.
+-#}
 {% extends "base.html" %}
 {% from "partials/ui.html" import stat_card %}
 

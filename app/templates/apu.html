@@ -1,3 +1,13 @@
+{#
+    apu.html — Página del catálogo de APU (GET /apu, routers/apu.py).
+    EN SIMPLE: encabezado + botón "Nuevo APU" + tabla. Crear/editar se hace en un modal.
+    TÉCNICO:
+      - Alpine `modalAbierto` controla el modal; HTMX carga dentro (#modal-contenido)
+        el formulario pedido a /apu/nuevo o /apu/{id}/editar.
+      - Los filtros hacen hx-get="/apu" y reemplazan solo #contenido-apu (la tabla).
+      - Tras guardar, el servidor responde la tabla con HX-Retarget="#contenido-apu"
+        y dispara "cerrar-modal-apu" (HX-Trigger-After-Settle).
+-#}
 {% extends "base.html" %}
 {% from "partials/ui.html" import icono, encabezado, stat_card %}
 

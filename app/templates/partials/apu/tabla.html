@@ -1,3 +1,11 @@
+{#
+    partials/apu/tabla.html — Tarjetas de resumen + tabla de APU + paginación.
+    EN SIMPLE: la parte de la página de APU que se redibuja al filtrar, paginar,
+      crear, editar o activar/desactivar (sin recargar toda la página).
+    TÉCNICO: interruptor -> hx-post /apu/{id}/estado; editar -> hx-get al modal;
+      la paginación usa hx-boost (enlaces normales convertidos en peticiones HTMX).
+      `resaltar_id` marca la fila recién creada/editada.
+-#}
 
 {% from "partials/ui.html" import icono, paginacion, interruptor, stat_card %}
 

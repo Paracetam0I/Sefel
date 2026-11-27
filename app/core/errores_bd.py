@@ -1,14 +1,22 @@
 """Errores de base de datos explicados al usuario.
 
-Se usa al arrancar (client.py / scripts/iniciar.py) y durante la ejecución
-(manejador global en app/core/handlers.py): en vez de un "Algo salió mal"
-genérico, se dice qué pasó, dónde está la base y qué hacer.
+EN SIMPLE
+    SQLite da errores en inglés y crípticos ("database is locked"). Este
+    módulo es un "traductor": los convierte en un mensaje claro con qué pasó
+    y qué hacer.
+
+TÉCNICO
+    Se usa al arrancar (client.py / scripts/iniciar.py) y durante la ejecución
+    (manejador global en app/core/handlers.py): en vez de un "Algo salió mal"
+    genérico, se dice qué pasó, dónde está la base y qué hacer.
+    Funciona buscando fragmentos de texto conocidos en el mensaje del error.
 """
 from sqlalchemy.exc import DBAPIError
 
 from app.core.config import DATABASE_PATH
 
 # (fragmento del error de SQLite, título, qué hacer)
+# Se revisan en orden; gana el primero cuyo fragmento aparece en el error.
 CASOS = [
     ("unable to open database file",
      "No se encontró la base de datos o no se puede abrir.",
@@ -36,7 +44,11 @@ CASOS = [
 
 
 def describirErrorBD(exc: BaseException) -> tuple[str, str]:
-    """(título, qué hacer) para un error de base de datos."""
+    """(título, qué hacer) para un error de base de datos.
+
+    Técnico: SQLAlchemy envuelve el error original de sqlite3 en `exc.orig`;
+    se usa ese texto si existe (es más preciso), en minúsculas para comparar.
+    """
     texto = str(getattr(exc, "orig", None) or exc).lower()
     for fragmento, titulo, accion in CASOS:
         if fragmento in texto:
@@ -52,4 +64,5 @@ def mensajeErrorBD(exc: BaseException) -> str:
 
 
 def esErrorBD(exc: BaseException) -> bool:
+    """True si la excepción viene del driver de la base (sqlite3 vía SQLAlchemy)."""
     return isinstance(exc, DBAPIError)

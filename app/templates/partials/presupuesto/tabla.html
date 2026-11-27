@@ -1,3 +1,11 @@
+{#
+    partials/presupuesto/tabla.html — Filtros + tabla de presupuestos + paginación.
+    EN SIMPLE: se redibuja sola al escribir en el buscador o cambiar el filtro de estado.
+    TÉCNICO: buscador con hx-trigger="keyup changed delay:400ms"; select de estado
+      con hx-trigger="change"; hx-include="closest form" envía todos los filtros juntos.
+      Menú de estado por fila (Alpine `abierto`) -> hx-post /presupuestos/{id}/estado.
+      Botones de edición solo si puede(usuario, "presupuestos_edicion").
+-#}
 {% from "partials/ui.html" import icono, paginacion %}
 {# VIEWER: solo lectura y exportar (el backend responde 403 igual) #}
 {% set puede_editar = puede(usuario, "presupuestos_edicion") %}

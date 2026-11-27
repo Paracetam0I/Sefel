@@ -1,3 +1,7 @@
+{#
+    admin-panel/form.html — Formulario antiguo de usuario.
+    OJO: ya no lo usa ningún router (admin.py dibuja el formulario dentro de list.html).
+-#}
 {% extends "base.html" %}
 {% block content %}
   <h1>{{ "Editar usuario" if modo == "editar" else "Nuevo usuario" }}</h1>

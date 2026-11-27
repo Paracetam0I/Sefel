@@ -1,3 +1,14 @@
+{#
+    item_nuevo.html — "Agregar ítem" a un presupuesto (routers/items.py).
+    EN SIMPLE: 1) buscas un APU, 2) eliges uno y se rellenan unidad y precios,
+      3) indicas cantidad y guardas. Abajo, la lista de ítems ya agregados (editables).
+    TÉCNICO:
+      - Buscador: hx-get="/api/apu/buscar" con hx-trigger="input changed delay:300ms"
+        (espera 300 ms sin teclear antes de pedir, para no saturar el servidor).
+      - Resultados -> partials/apu/buscar_resultados.html en #resultados-apu.
+      - Elegir uno -> /api/apu/{id}/autocompletar rellena #campos-apu.
+      - Guardar: POST normal a /presupuestos/{id}/items (redirige de vuelta aquí).
+-#}
 {% extends "base.html" %}
 {% from "partials/ui.html" import encabezado %}
 

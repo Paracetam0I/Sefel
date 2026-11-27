@@ -1,3 +1,24 @@
+"""
+main.py — Punto de entrada de la aplicación web (FastAPI).
+
+EN SIMPLE
+    Es el "edificio" donde vive la app. Aquí se:
+      1. Crea la aplicación.
+      2. Instalan los "filtros" que pasa cada petición (middlewares): sesión,
+         avisos HTMX y registro en el log.
+      3. Conectan las "secciones" (routers): dashboard, APU, presupuestos,
+         ítems y administración de usuarios.
+      4. Define el login y el logout.
+
+TÉCNICO
+    Recorrido de una petición:
+      navegador -> SessionMiddleware (lee la cookie) -> NotificacionesHtmx
+      -> registrarSolicitudes (log) -> router/endpoint -> Depends(...)
+      (sesión BD, usuario, rol) -> plantilla Jinja -> respuesta.
+    Los errores (sin login, sin rol, BD) los atrapan los handlers de
+    app/core/handlers.py; cualquier otro error inesperado, manejarErrorInesperado.
+    La app se sirve con uvicorn (ver client.py / scripts/iniciar.py).
+"""
 
 import logging
 import os
@@ -44,6 +65,8 @@ from app.templates import templates
 
 logger = configuracionLogging()
 
+# docs/redoc/openapi en None: se desactiva la documentación automática
+# (/docs), porque es una app de escritorio, no una API pública.
 app = FastAPI(
     title="Proyecto APU Sefel",
     version="0.1.0",
@@ -56,6 +79,10 @@ app = FastAPI(
 # la cola de mensajes antes de que la sesión se guarde en la cookie.
 app.add_middleware(NotificacionesHtmx)
 
+# Sesión = cookie "sefel_session" firmada con SECRET_KEY. Guarda user_id y la
+# hora de última actividad. Si alguien la modifica, la firma no coincide y se
+# descarta. (Importante: los middlewares se ejecutan en orden INVERSO al que
+# se agregan; el último agregado es el primero en recibir la petición.)
 app.add_middleware(
     SessionMiddleware,
     secret_key=SECRET_KEY,
@@ -66,6 +93,7 @@ app.add_middleware(
 )
 
 def getBaseDir() -> str:
+    """Carpeta app/ (desarrollo) o sys._MEIPASS (ejecutable). Igual que en templates.py."""
     # Si PyInstaller congeló la app, los recursos están en sys._MEIPASS
     if getattr(sys, "frozen", False):
         return sys._MEIPASS  # type: ignore[attr-defined]
@@ -78,12 +106,15 @@ BASE_DIR = getBaseDir()
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
+# Sirve CSS/JS tal cual: /static/css/output.css -> app/static/css/output.css
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # ==================================================
 # Bloque para registros
 # ==================================================
+# Manejadores de error (login requerido, rol prohibido, error de BD)
 registerAuthHandlers(app, templates)
+# Cada router agrupa las rutas de un módulo (ver app/core/routers/)
 app.include_router(admin.router)
 app.include_router(presupuestos.router)
 app.include_router(apu.router)
@@ -121,6 +152,10 @@ async def registrarInicio():
 
 @app.middleware("http")
 async def registrarSolicitudes(request: Request, call_next):
+    """Anota en el log cada petición: método, ruta, código y cuánto tardó.
+
+    Ej.: "GET /presupuestos -> 200 (0.012 segundos)".
+    """
     inicio = time.perf_counter()
 
     response = await call_next(request)
@@ -144,6 +179,11 @@ async def manejarErrorInesperado(
     request: Request,
     exc: Exception,
 ):
+    """Red de seguridad: cualquier error no previsto -> log completo + página 500 genérica.
+
+    Al usuario no se le muestra el detalle técnico (podría revelar información
+    interna); el traceback completo queda en logs/sefel.log.
+    """
     logger.error(
         "Error inesperado en %s %s",
         request.method,
@@ -166,6 +206,7 @@ async def manejarErrorInesperado(
 
 @app.get("/")
 def index(request: Request, usuario: CurrentUser):
+    """Página de inicio (requiere login)."""
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -190,6 +231,10 @@ def saludo():
 
 @app.get("/login")
 def mostrarLogin(request: Request, usuario: OptionalUser, motivo: str = ""):
+    """GET /login: muestra el formulario. Si ya hay sesión, va directo al dashboard.
+
+    ?motivo=inactividad -> muestra el aviso "Tu sesión se ha cerrado por inactividad".
+    """
     if usuario is not None:
         # Revisar esto luego, no redirigir al dashboard, si no que a otra ruta por defecto
         return RedirectResponse(url="/dashboard", status_code=303)
@@ -205,6 +250,7 @@ def mostrarLogin(request: Request, usuario: OptionalUser, motivo: str = ""):
 
 
 def _errorLogin(request: Request, mensaje: str, status_code: int):
+    """Vuelve a mostrar el login con un mensaje de error y el código HTTP indicado."""
     return templates.TemplateResponse(
         request=request,
         name="auth/login.html",
@@ -221,6 +267,17 @@ def procesarLogin(
     password: str = Form(...),
     session: Session = Depends(getSession)
 ):
+    """POST /login: valida usuario y contraseña e inicia la sesión.
+
+    En simple: revisa en orden ¿existe? -> ¿está activo? -> ¿está bloqueado
+    temporalmente? -> ¿la contraseña es correcta? Si todo va bien, guarda el
+    id del usuario en la cookie de sesión y lo manda al dashboard.
+
+    Códigos HTTP: 401 credenciales malas, 403 cuenta desactivada,
+    429 bloqueo temporal (demasiados intentos), 303 redirección si entra.
+    Nota: el mensaje es el mismo si el usuario no existe o si la contraseña
+    está mal, para no revelar qué nombres de usuario existen.
+    """
     # Si el usuario tiene sesión, lo redirige a dashboard
     if user is not None:
         return RedirectResponse("/dashboard", status_code=303)
@@ -273,6 +330,8 @@ def procesarLogin(
     session.add(usuario)
     session.commit()
 
+    # Se limpia la sesión anterior antes de escribir la nueva (evita reutilizar
+    # datos de otra sesión: "session fixation").
     request.session.clear()
     request.session["user_id"] = usuario.id # Guardamos el ID del usuario en la sesión (se escribe en una cookie)
     marcarActividad(request)
@@ -291,6 +350,11 @@ def registrarActividad(usuario: CurrentUser):
 # Formulario para salir de sesión
 @app.post("/logout")
 def cerrarSesion(request: Request, motivo: str = ""):
+    """POST /logout: borra la sesión y vuelve al login.
+
+    Es POST (no GET) para que un simple enlace o imagen no pueda cerrar la
+    sesión de alguien sin querer.
+    """
     request.session.clear()
     destino = "/login"
     if motivo == MOTIVO_INACTIVIDAD:

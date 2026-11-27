@@ -1,3 +1,23 @@
+"""
+admin.py — Administración de usuarios (solo ADMIN).
+
+EN SIMPLE
+    Es la pantalla donde el administrador ve la lista de usuarios, los busca
+    y filtra, crea cuentas nuevas, cambia correo/nombre/rol/contraseña y
+    activa o desactiva cuentas (incluido desbloquear las que se bloquearon por
+    intentos fallidos).
+
+TÉCNICO
+    Rutas (todas bajo /admin/users, protegidas con AdminUser):
+      GET  /admin/users                 -> lista (+ filtros, paginación, panel crear/editar)
+      GET  /admin/users/new             -> redirige a ?nuevo=1 (enlace antiguo)
+      POST /admin/users                 -> crear
+      POST /admin/users/{id}            -> editar
+      POST /admin/users/{id}/estado     -> activar/desactivar (interruptor)
+    Patrón POST/Redirect/GET: tras guardar se redirige (303) para que recargar
+    la página no reenvíe el formulario. Los errores de validación, en cambio,
+    vuelven a dibujar la lista con el formulario y el mensaje (400).
+"""
 from datetime import datetime, timedelta, timezone
 from math import ceil
 from typing import Annotated
@@ -28,6 +48,11 @@ LISTA_URL = "/admin/users"
 # Utilidades
 # ==========================================
 def _filtrar(todos: list[User], q: str, rol: str, estado: str) -> list[User]:
+    """Filtra en memoria: texto (en nombre, usuario o correo), rol y estado.
+
+    Filtro vacío = no filtra por ese criterio. Se hace en Python (no en SQL)
+    porque la cantidad de usuarios es pequeña.
+    """
     texto = q.strip().lower()
     resultado = []
     for u in todos:
@@ -44,6 +69,7 @@ def _filtrar(todos: list[User], q: str, rol: str, estado: str) -> list[User]:
 
 
 def _accesoReciente(u: User, dias: int = 7) -> bool:
+    """True si el usuario inició sesión en los últimos `dias` días."""
     if u.last_login is None:
         return False
     ultimo = u.last_login
@@ -53,6 +79,7 @@ def _accesoReciente(u: User, dias: int = 7) -> bool:
 
 
 def _resumen(todos: list[User]) -> dict:
+    """Números de las tarjetas superiores (total, roles distintos, activos...)."""
     activos = sum(1 for u in todos if u.is_active)
     return {
         "total": len(todos),
@@ -64,6 +91,7 @@ def _resumen(todos: list[User]) -> dict:
 
 
 def _formDe(u: User | None) -> dict:
+    """Valores iniciales del formulario: vacío para crear, o los del usuario a editar."""
     if u is None:
         return {"username": "", "email": "", "full_name": "", "role": UserRole.VIEWER.value, "is_active": True}
     return {"username": u.username, "email": u.email, "full_name": u.full_name, "role": u.role.value, "is_active": u.is_active}
@@ -84,6 +112,12 @@ def _renderLista(
     error: str | None = None,
     status_code: int = 200,
 ):
+    """Dibuja la página de usuarios. La usan listar() y los errores de crear/editar.
+
+    Paginación: con 6 por página, la página 2 muestra los elementos [6:12].
+    La página pedida se ajusta al rango válido (si piden la 99 y hay 3, se ve la 3).
+    El * en la firma obliga a pasar los demás parámetros por nombre.
+    """
     todos = session.exec(select(User).order_by(User.full_name)).all()
     filtrados = _filtrar(todos, q, rol, estado)
 
@@ -141,6 +175,10 @@ def listar(
     editar: int | None = None,
     nuevo: bool = False,
 ):
+    """GET /admin/users. Los parámetros llegan por la URL (?q=...&rol=...&pagina=2).
+
+    ?editar=<id> abre el panel de edición; ?nuevo=1 abre el de creación.
+    """
     editando = _buscar(session, editar) if editar is not None else None
     modo = "editar" if editando else ("crear" if nuevo else None)
     return _renderLista(
@@ -170,9 +208,15 @@ def crear(
     is_active: str | None = Form(None),
     session: Session = Depends(getSession),
 ):
+    """POST /admin/users: crea un usuario tras validar campos, contraseña y duplicados.
+
+    is_active llega como None si el checkbox no estaba marcado (los checkbox
+    desmarcados no se envían en un formulario HTML).
+    """
     username, email, full_name = username.strip(), email.strip(), full_name.strip()
     form = {"username": username, "email": email, "full_name": full_name, "role": role.value, "is_active": is_active is not None}
 
+    # Función interna: vuelve a mostrar el formulario con lo escrito + el error
     def rechazar(mensaje: str):
         return _renderLista(request, admin, session, modo="crear", form=form, error=mensaje, status_code=400)
 
@@ -215,6 +259,11 @@ def actualizar(
     is_active: str | None = Form(None),
     session: Session = Depends(getSession),
 ):
+    """POST /admin/users/{id}: guarda cambios. El username no se puede cambiar.
+
+    Contraseña vacía = no cambiarla. Un admin no puede quitarse a sí mismo el
+    rol ADMIN ni desactivarse (podría quedar el sistema sin administradores).
+    """
     usuario = _buscar(session, user_id)
     if usuario is None:
         flash(request, "Ese usuario ya no existe.", "error")
@@ -263,6 +312,7 @@ def cambiarEstado(
     admin: AdminUser,
     session: Session = Depends(getSession),
 ):
+    """POST /admin/users/{id}/estado: invierte activo <-> inactivo (con auditoría)."""
     usuario = _buscar(session, user_id)
     if usuario is None:
         flash(request, "Ese usuario ya no existe.", "error")
